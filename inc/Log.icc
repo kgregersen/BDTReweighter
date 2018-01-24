@@ -1,0 +1,62 @@
+
+// default ostream operator
+template<typename T> 
+inline Log & Log::operator<<(const T & data) 
+{ 
+
+  if ( m_currentlevel >= m_printlevel ) m_outstream << data; 
+
+  return *this; 
+
+}
+
+// specialisation of ostream operator for setting/printing log level
+template<> 
+inline Log & Log::operator<<(const Log::LEVEL & level) {
+
+  m_currentlevel = level;
+  
+  if ( m_currentlevel < m_printlevel ) return *this;
+  
+  m_outstream << std::setw(15) << std::left << m_name;
+  
+  switch(level) {
+  case DEBUG:
+    m_outstream << MAGENTA << std::setw(7) << std::right << "DEBUG";
+    break;
+  case VERBOSE:
+    m_outstream << CYAN    << std::setw(7) << std::right << "VERBOSE";
+    break;
+  case INFO:
+    m_outstream << GREEN   << std::setw(7) << std::right << "INFO";
+    break;
+  case WARNING:
+    m_outstream << YELLOW  << std::setw(7) << std::right << "WARNING";
+    break;
+  case ERROR:
+    m_outstream << RED     << std::setw(7) << std::right << "ERROR";
+    break;
+  case FATAL:
+    m_outstream << BOLDRED << std::setw(7) << std::right << "FATAL";
+    break;
+  case INDENT:
+    m_outstream            << std::setw(7) << std::right << " ";    
+  }
+  
+  m_outstream << RESET << "  ";
+  
+  return *this;
+
+}
+
+// specialisation of ostream operator for ending line (using the empty tagging struct 'endl')
+template<> 
+inline Log & Log::operator<<(const Log::endl &) {
+
+  if (m_currentlevel>=m_printlevel) m_outstream << std::endl;
+  
+  return *this;
+
+}
+
+

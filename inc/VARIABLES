@@ -1,0 +1,18 @@
+// Add reweighting variables here using the preprocesser macro VARIABLE(name, type)
+// Macro is define din 'inc/Variable.h' and 'stc/Event.cxx'
+//	 
+// The variables in this file are automatically added to an unordered_set via
+//
+// Variables::Initialize();
+//
+// which can be accessed later via:
+//
+// std::unordered_set<Variable *> vars = Variables::Get();
+
+VARIABLE( hcand1_pt , float )
+VARIABLE( hcand2_pt , float )
+VARIABLE( hcand1_m  , float )
+VARIABLE( hcand2_m  , float )
+VARIABLE( jet_n     , int   )
+VARIABLE( MEt       , float )
+VARIABLE( meffHC    , float )

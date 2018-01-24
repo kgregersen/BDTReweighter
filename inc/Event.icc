@@ -1,0 +1,93 @@
+// STL includes
+#include <iostream>
+#include <map>
+
+// ROOT includes
+#include "TString.h"
+#include "TTree.h"
+
+
+template <typename T>
+T & Event::GetVar(const TString & name)
+{
+
+  std::map<TString, VarBase *>::iterator it = m_varMap.find( name );
+  if (it == m_varMap.end()) {
+    m_log << Log::ERROR << "GetVar() : Couldn't find variable with name = " << name.Data() << Log::endl();
+    throw(0);
+  }
+  
+  Var<T> * var = dynamic_cast<Var<T> *>(it->second);
+  if ( ! var ) {
+    m_log << Log::ERROR << "GetVar() : Wrong type! name = " << name.Data() << Log::endl();
+    throw(0);
+  }
+  
+  return var->value;
+
+}
+
+
+template <typename T>
+const T & Event::GetVar(const TString & name) const
+{
+
+  std::map<TString, VarBase *>::const_iterator it = m_varMap.find( name );
+  if (it == m_varMap.end()) {
+    m_log << Log::ERROR << "GetVar() const : Wrong type! name = " << name.Data() << Log::endl();
+    throw(0);
+  }
+  
+  const Var<T> * var = dynamic_cast<Var<T> *>(it->second);
+  if ( ! var ) {
+    m_log << Log::ERROR << "GetVar() const : Wrong type! name = " << name.Data() << Log::endl();
+    throw(0);
+  }
+  
+  return var->value;
+
+}
+
+
+template<typename T>
+void Event::SetVar(const TString & name, const T & value)
+{
+  
+  std::map<TString, VarBase *>::iterator it = m_varMap.find( name );
+  if (it == m_varMap.end()) {
+    m_varMap.insert( std::make_pair(name, static_cast<VarBase*>(new Var<T>(value))) );
+  }
+  else {
+    Var<T> * var = dynamic_cast<Var<T> *>(it->second);
+    if ( ! var ) {
+      m_log << Log::ERROR << "SetVar() const : Wrong type! name = " << name.Data() << Log::endl();
+      throw(0);
+    }
+    var->value = value;
+  }
+
+}
+
+
+template<typename T>
+void Event::ConnectVariable(const TString & name, TTree * tree){
+
+  std::map<TString, VarBase *>::iterator it = m_varMap.find( name );
+  if (it != m_varMap.end()) {
+    m_log << Log::DEBUG << "ConnectVariable() : " << name.Data() << " is already in map - retrieving variable and connecting to tree" << Log::endl();
+    T & value = GetVar<T>(name);
+    tree->SetBranchStatus(name, 1);
+    tree->SetBranchAddress(name, &value); 
+  }
+  else {
+    m_log << Log::DEBUG << "ConnectVariable() : Connecting " << name.Data() << Log::endl();
+    Var<T> * var = new Var<T>();
+    m_varMap.insert( std::make_pair(name, (VarBase*)var) );  
+    tree->SetBranchStatus(name, 1);
+    tree->SetBranchAddress(name, &(var->value)); 
+  }
+  
+}
+  
+
+

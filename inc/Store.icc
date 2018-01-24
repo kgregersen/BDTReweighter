@@ -1,0 +1,128 @@
+// STL includes
+#include <string>
+#include <sstream>
+#include <map>
+
+// Analysis includes
+#include "FieldBase.h"
+#include "Field.h"
+
+
+template <class T> 
+const T & Store::get(const std::string & key) const
+{
+  
+  std::map<std::string, FieldBase *>::const_iterator it = m_data.find(key);
+   
+  if ( it == m_data.end() ) {
+    m_log << Log::ERROR << "get() : field with name " << key << " doesn't exist!" << Log::endl();
+    throw 0;
+  }
+  
+  Field<T> * field = dynamic_cast<Field<T> *>(it->second);    
+  if ( field == 0 ) {
+    m_log << Log::ERROR << "get() : field with name " << key << " doesn't have correct type!" << Log::endl();
+    throw 0;
+  }
+  
+  return field->get();
+
+}
+
+
+template <class T> 
+void Store::getif(const std::string & key, T & value) const
+{
+  
+  std::map<std::string,FieldBase *>::const_iterator it = m_data.find(key);
+   
+  if ( it != m_data.end() ) {
+    
+    Field<T> * field = dynamic_cast<Field<T> *>(it->second);    
+    if ( field == 0 ) {
+      m_log << Log::ERROR << "getif() : field with name " << key << "doesn't have correct type!" << Log::endl();
+      throw 0;
+    }
+    else value = field->get();
+  
+  }
+
+}
+
+
+template <class T> 
+void Store::put(const std::string & key, const T & value, bool overwrite) 
+{
+
+  std::map<std::string,FieldBase *>::iterator it = m_data.find(key);
+  
+  if ( it != m_data.end() ) {
+    if ( ! overwrite ) {
+      m_log << Log::ERROR << "put() : field with name " << key << " doesn't exist!" << Log::endl();
+      throw 0;
+    } 
+    else {
+      delete it->second; 
+      it->second = 0;
+    }
+  }
+  
+  Field<T> * field = new Field<T>(value);
+  m_data[key] = field;
+
+}
+
+
+template <class T>
+T Store::convertField(const std::string & value) 
+{
+  
+  std::istringstream iss(value);
+  T object;
+  
+  iss >> std::ws >> object >> std::ws;
+  
+  if ( ! iss.eof() ) {
+    m_log << Log::ERROR << "convertField() : couldn't convert " << value << Log::endl();
+    throw 0;
+  }
+  
+  return object;
+  
+}
+
+
+template <>
+inline bool Store::convertField(const std::string & value) 
+{
+
+  std::istringstream iss(value);
+  bool object;
+
+  iss >> std::ws >> std::boolalpha >> object >> std::ws;
+
+  if ( ! iss.eof() ) {
+    m_log << Log::ERROR << "convertField() : couldn't convert " << value << Log::endl();
+    throw 0;
+  }
+
+  return object;
+
+}
+
+
+template <class T>
+std::vector<T> Store::convertVector(const std::vector<std::string> & value) 
+{
+  
+  std::vector<T> object;
+  
+  for (unsigned int i=0; i<value.size(); ++i) {    
+    object.push_back( convertField<T>( value[i] ) );
+  }
+  
+  return object;
+  
+}
+
+

@@ -1,0 +1,19 @@
+
+# I/O settings
+string OutputFileName          = BDTweights.txt
+string InputFileName           = ../files/Processed_EventAnaResults_resolved_171130.root
+string InputTreeNameInitial    = data_SemiTagged
+string InputTreeNameTarget     = data_FullyTagged
+
+# additional variables
+string EventWeightVariableName = weight
+
+# hyperparameters
+int    NumberOfTrees           = 20
+int    MaxTreeLayers           = 8
+int    MinEventsNode           = 200
+float  LearningRate            = 0.7
+
+# misc. settings
+string PrintLevel              = INFO
+
