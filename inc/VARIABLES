@@ -1,5 +1,4 @@
-// Add reweighting variables here using the preprocesser macro VARIABLE(name, type)
-// Macro is defined in 'inc/Variable.h' and 'src/Event.cxx'
+// Add reweighting variables here using the preprocesser macro VARIABLE(name, type) which is defined in 'src/Variales.cxx'
 //	 
 // The variables in this file are automatically added to an std::vector via
 //
