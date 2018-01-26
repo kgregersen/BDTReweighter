@@ -1,13 +1,13 @@
 // Add reweighting variables here using the preprocesser macro VARIABLE(name, type)
-// Macro is define din 'inc/Variable.h' and 'stc/Event.cxx'
+// Macro is defined in 'inc/Variable.h' and 'src/Event.cxx'
 //	 
-// The variables in this file are automatically added to an unordered_set via
+// The variables in this file are automatically added to an std::vector via
 //
 // Variables::Initialize();
 //
 // which can be accessed later via:
 //
-// std::unordered_set<Variable *> vars = Variables::Get();
+// std::vector<Variable *> vars = Variables::Get();
 
 VARIABLE( hcand1_pt , float )
 VARIABLE( hcand2_pt , float )
