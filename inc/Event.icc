@@ -50,26 +50,6 @@ const T & Event::GetVar(const TString & name) const
 
 
 template<typename T>
-void Event::SetVar(const TString & name, const T & value)
-{
-  
-  std::map<TString, VarBase *>::iterator it = m_varMap.find( name );
-  if (it == m_varMap.end()) {
-    m_varMap.insert( std::make_pair(name, static_cast<VarBase*>(new Var<T>(value))) );
-  }
-  else {
-    Var<T> * var = dynamic_cast<Var<T> *>(it->second);
-    if ( ! var ) {
-      m_log << Log::ERROR << "SetVar() const : Wrong type! name = " << name.Data() << Log::endl();
-      throw(0);
-    }
-    var->value = value;
-  }
-
-}
-
-
-template<typename T>
 void Event::ConnectVariable(const TString & name, TTree * tree){
 
   std::map<TString, VarBase *>::iterator it = m_varMap.find( name );

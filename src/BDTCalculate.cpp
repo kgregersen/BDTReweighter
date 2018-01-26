@@ -26,7 +26,7 @@ int main(int argc, char * argv[]) {
   Store * config = Store::createStore(configpath.c_str());
 
   // initialize log
-  Log log("BDTRweighter");
+  Log log("BDTCalculate");
   std::string str_level;
   config->getif<std::string>("PrintLevel", str_level);
   if (str_level.length() > 0) {

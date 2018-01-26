@@ -1,7 +1,7 @@
 
 # I/O settings
 string OutputFileName          = BDTweights.txt
-string InputFileName           = ../files/Processed_EventAnaResults_resolved_171130.root
+string InputFileName           = test.root
 string InputTreeNameInitial    = data_SemiTagged
 string InputTreeNameTarget     = data_FullyTagged
 

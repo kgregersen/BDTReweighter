@@ -51,16 +51,14 @@ public:
   // destructor
   ~Event() {}
   
+  // connect all
   void ConnectAllVariables(TTree * tree);
-  void AddWeight(float w);
-  TString GetType(const TString & name) const;
 
-  template<typename T>
-  void SetVar(const TString & name, const T & value);
-  
+  // get variable (non-const)
   template <typename T>
   T & GetVar(const TString & name);
 
+  // get variable (const)
   template <typename T>
   const T & GetVar(const TString & name) const;
 

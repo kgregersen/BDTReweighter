@@ -43,27 +43,3 @@ void Event::ConnectAllVariables(TTree * tree)
 }
 
 
-void Event::AddWeight(float w)
-{
-  
-  static const std::string & eventWeightVariable = m_store->get<std::string>("EventWeightVariable");
-  static float & weight = GetVar<float>(eventWeightVariable.c_str());
-  weight *= w;
-  
-}
-
-
-TString Event::GetType(const TString & name) const
-{
-
-  std::map<TString, VarBase *>::const_iterator it = m_varMap.find( name );
-  if (it == m_varMap.end()) {
-    m_log << Log::ERROR << "GetType() : " << name.Data() << " is not in map!" << Log::endl();
-    throw(0);
-  }
-
-  const VarBase * var = it->second;
-  
-  return var->Type();  
-
-}
