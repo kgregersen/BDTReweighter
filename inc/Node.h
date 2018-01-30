@@ -132,23 +132,25 @@ public:
   // string version of status
   std::string StatusStr() const;
    
+  // set status
+  void SetStatus(STATUS status);
+
   // get input branch
   const Branch * InputBranch() const;
 
   // get output branch
   const Branch * OutputBranch() const;
 
-  // grow node
-  void Build(TTree * initial,
-	     TTree * target,
-	     const HistDefs & histDefs,
-	     Branch *& b1,
-	     Branch *& b2,
-	     const std::vector<const DecisionTree *> & decisionTrees);
-
+  // initialize histograms
+  void Initialize(const HistDefs & histDefs);  
+  
   // fill histograms
-  void FillHistograms(TTree * tree, std::vector<Hist *> histSet, const std::vector<const DecisionTree *> * decisionTrees = 0) const;
+  void FillInitial(float weight);
+  void FillTarget(float weight);
 
+  // build node
+  void Build(Branch *& b1, Branch *& b2);
+  
   // get #initial
   float SumInitial() const;
   
@@ -160,9 +162,6 @@ public:
 
   // set weight (and lock it)
   void SetAndLockWeight(float weight) const;
-
-  // get number of layers in front of this node
-  int NumberOfLayers() const;
 
   
 private:
@@ -178,6 +177,10 @@ private:
   // weight
   mutable float m_weight;
   mutable bool m_weightIsSet;
+
+  // histograms
+  std::vector<Hist *> m_histSetInitial;
+  std::vector<Hist *> m_histSetTarget;
   
   // sum of events
   float m_sumInitial;

@@ -12,6 +12,7 @@
 
 // forward declarations
 class Node;
+class Branch;
 class Store;
 class TTree;
 
@@ -29,6 +30,15 @@ public:
   // grow tree
   void GrowTree(const std::vector<const DecisionTree *> & decisionTrees);
 
+  // fill nodes
+  void FillNodes(std::vector<Node *> buildNodes, const std::vector<const DecisionTree *> * decisionTrees = 0) const;
+
+  // create new node
+  void CreateNode(Branch * input, std::vector<Node *> & nextLayer);
+
+  // add node to decision tree
+  void AddNodeToTree(const Node * node);
+    
   // get weight
   float GetWeight() const;
 
@@ -50,7 +60,7 @@ private:
   const HistDefs & m_histDefs;
   
   // nodes
-  std::vector<Node *> m_nodes;
+  std::vector<const Node *> m_nodes;
 
   // logger
   mutable Log m_log;

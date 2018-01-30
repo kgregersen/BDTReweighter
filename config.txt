@@ -10,10 +10,11 @@ string EventWeightVariableName = weight
 
 # hyperparameters
 int    NumberOfTrees           = 20
-int    MaxTreeLayers           = 8
-int    MinEventsNode           = 200
-float  LearningRate            = 0.7
+int    MaxTreeLayers           = 5
+int    MinEventsNode           = 250
+float  LearningRate            = 0.25
+float  SamplingFraction        = 0.7       
+float  SamplingFractionSeed    = 314314       
 
 # misc. settings
-string PrintLevel              = INFO
-
+string PrintLevel              = VERBOSE

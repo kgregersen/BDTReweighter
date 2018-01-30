@@ -3,12 +3,14 @@
 #include "Branch.h"
 #include "Node.h"
 #include "Store.h"
+#include "Event.h"
 
 // stl includes
 #include <vector>
 
 // ROOT includes
 #include "TTree.h"
+#include "TRandom3.h"
 
 
 
@@ -48,29 +50,69 @@ void DecisionTree::GrowTree(const std::vector<const DecisionTree *> & decisionTr
 
   // declare first node
   Node * node = new Node(m_store, 0);
-  m_nodes.push_back(node);
 
+  // declare vector to hold nodes to be build
+  std::vector<Node *> layer;
+  layer.push_back(node);
+  
   // add nodes to tree
-  while (node->Status() == Node::NEW) {
+  int nlayers = 0;
+  while ( layer.size() > 0 ) {
 
-    // declare output branches
-    Branch * b1 = 0;
-    Branch * b2 = 0;
+    // check number of layers
+    static int maxLayers = m_store->get<int>("MaxTreeLayers");
+    if ( nlayers >= maxLayers ) {
 
-    // build node
-    node->Build(m_initial, m_target, m_histDefs, b1, b2, decisionTrees);
+      // print verbose message
+      m_log << Log::VERBOSE << "Build() : Max layers reached - finalizing nodes!" << Log::endl();
 
-    // insert sub-nodes
-    if ( b1 ) m_nodes.push_back( new Node(m_store, b1) );
-    if ( b2 ) m_nodes.push_back( new Node(m_store, b2) );
-        
-    // find next node to build
-    for (Node * n : m_nodes) {
-      if ( n->Status() == Node::NEW ) {
-	node = n;
-	break;
+      // set status of nodes to FINAL and add to decision tree
+      for (Node * node : layer) {
+	node->SetStatus( Node::FINAL );
+	AddNodeToTree( node );
       }
+
+      // break out of loop (no more layers to grow)
+      break;
+      
     }
+
+    // initialise histograms on nodes
+    for (Node * node : layer) {
+      node->Initialize( m_histDefs );
+    }
+
+    // fill nodes (first target, then initial)
+    FillNodes(layer);
+    FillNodes(layer, &decisionTrees); 
+
+    // prepare vector for next layer of nodes
+    std::vector<Node *> nextLayer;
+        
+    // build nodes
+    for (Node * node : layer) {
+      
+      // declare output branches
+      Branch * b1 = 0;
+      Branch * b2 = 0;
+      
+      // build node
+      node->Build(b1, b2);
+
+      // add to decision tree nodes
+      AddNodeToTree(node);
+      
+      // create sub-nodes 
+      if ( b1 ) CreateNode(b1, nextLayer);
+      if ( b2 ) CreateNode(b2, nextLayer);
+      
+    }
+
+    // set next layer
+    layer = nextLayer;
+    
+    // increment layer counter
+    ++nlayers;
     
   }
 
@@ -141,7 +183,108 @@ void DecisionTree::GrowTree(const std::vector<const DecisionTree *> & decisionTr
   m_log << Log::INFO << "GrowTree() : ----------------------------------------" << Log::endl();
 
 }
+
+
+void DecisionTree::CreateNode(Branch * input, std::vector<Node *> & nextLayer) 
+{
+
+  // declare node
+  Node * node = new Node(m_store, input);
+
+  // check if it's a FINAL node or if we can grow it further
+  if (node->Status() == Node::FINAL) {
+    AddNodeToTree( node );
+  }
+  else {
+    nextLayer.push_back( node );
+  }
+
+}
+
+
+void DecisionTree::FillNodes(std::vector<Node *> buildNodes, const std::vector<const DecisionTree *> * decisionTrees) const
+{
+
+  // set TTree - if past decision trees are provided we pick the 'initial' tree, otherwise the 'target' tree
+  TTree * tree = 0;
+  if ( decisionTrees ) {
+    tree = m_initial;
+  }
+  else {
+    tree = m_target;
+  }
   
+  // prepare for loop over tree entries
+  long maxEvent = tree->GetEntries();
+  long reportFrac = maxEvent/(maxEvent > 100000 ? 10 : 1) + 1;
+  m_log << Log::VERBOSE << "FillHistograms() : Looping over events (" << tree->GetName() << ") : "  << maxEvent << Log::endl();
+  std::clock_t start = std::clock();
+
+  // Loop over ree entries
+  for (long ievent = 0; ievent < maxEvent; ++ievent) {
+
+    // print progress
+    if( ievent > 0 && ievent % reportFrac == 0 ) {
+      double duration     = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
+      double frequency    = static_cast<double>(ievent) / duration;
+      double timeEstimate = static_cast<double>(maxEvent - ievent) / frequency;
+      m_log << Log::VERBOSE << "FillHistograms() : ---> processed : " << std::setw(4) << 100*ievent/maxEvent << "\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time : " << std::setw(4) << static_cast<int>(timeEstimate) << " sec"<< Log::endl(); 
+    }
+    
+    // get event
+    tree->GetEntry( ievent );
+    
+    // apply sampling rate
+    static float samplingFraction   = m_store->get<float>("SamplingFraction");
+    static int samplingFractionSeed = m_store->get<float>("SamplingFractionSeed");
+    static TRandom3 ran( samplingFractionSeed );
+    if ( ran.Rndm() > samplingFraction ) continue;
+    
+    // loop over nodes
+    for (Node * node : buildNodes) {
+    
+      // apply cuts
+      bool pass = true;
+      const Branch * b = node->InputBranch();
+      while ( b ) {
+	if ( ! b->Pass() ) {
+	  pass = false;
+	  break;
+	}
+	b = b->InputNode()->InputBranch();
+      }
+      if ( ! pass ) continue;
+      
+      // get event weight
+      static const std::string & eventWeightName = m_store->get<std::string>("EventWeightVariableName");
+      static float & eventWeight = Event::Instance().GetVar<float>(eventWeightName);
+      
+      // get weights from previous trees
+      float dtreeWeight = 1.;
+      if ( decisionTrees ) {
+	for (const DecisionTree * dtree : *decisionTrees) {
+	  dtreeWeight *= dtree->GetWeight();
+	}
+	node->FillInitial(eventWeight*dtreeWeight);
+      }
+      else {
+	node->FillTarget(eventWeight);
+      }
+       
+      // all nodes are orthogonal, so we can break the loop here
+      break;
+
+    }
+    
+  }
+
+  // print out
+  double duration  = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
+  double frequency = static_cast<double>(maxEvent) / duration;
+  m_log << Log::VERBOSE<< "FillHistograms() : ---> processed :  100\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time :    0 sec"<< Log::endl(); 
+  
+}
+
 
 float DecisionTree::GetWeight() const
 {
@@ -157,6 +300,23 @@ float DecisionTree::GetWeight() const
   // return the weight 
   return node->GetWeight();
 
+}
+
+
+void DecisionTree::AddNodeToTree(const Node * node)
+{
+
+  // check if this node is already in the tree
+  for (const Node * n : m_nodes) {
+    if (node == n) {
+      m_log << Log::ERROR << "AddNodeToTree() : This node already exists in the decision tree!" << Log::endl();
+      throw(0);
+    }
+  }
+
+  // add node to decision tree
+  m_nodes.push_back( node );
+  
 }
 
 
@@ -197,7 +357,7 @@ const std::vector<const Node *> DecisionTree::FinalNodes() const
   std::vector<const Node *> finalNodes;
 
   // loop through nodes and identify final nodes
-  for (Node * node : m_nodes) {
+  for (const Node * node : m_nodes) {
     if ( node->Status() == Node::FINAL ) {
       finalNodes.push_back(node);
     }

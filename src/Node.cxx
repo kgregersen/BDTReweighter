@@ -35,6 +35,12 @@ Node::Node(const Store * store, Branch * input) :
     input->SetOutputNode(this);
     m_sumInitial = input->SumInitial();
     m_sumTarget  = input->SumTarget();
+    // set to FINAL if there are fewer than twice the min number of events on the node since then it can't be split
+    // (there still exist other cases where it can't be split, but we have to fill the histograms to identify these...)
+    static int minEvents = m_store->get<int>("MinEventsNode");
+    if ( m_sumTarget < 2.*minEvents || m_sumInitial < 2.*minEvents) {
+      m_status = FINAL;
+    }
   }
 
   // set log level
@@ -51,17 +57,45 @@ Node::Node(const Store * store, Branch * input) :
 Node::~Node()
 {
 
-  m_log << Log::INFO << "~Node() : Called" << Log::endl();
+  m_log << Log::DEBUG << "~Node() : Called" << Log::endl();
   
   delete m_input;
   m_input = 0;
   
 }
 
+
+void Node::Initialize(const HistDefs & histDefs)
+{
+
+  // check if this node was already initialized
+  if ( m_histSetInitial.size() || m_histSetTarget.size() ) {
+    m_log << Log::ERROR << "Initialize() : Histograms already initialized!" << Log::endl();
+    throw(0);
+  }
+  
+  // declare target and initial histograms
+  const std::vector<HistDefs::Entry> & histDefEntries = histDefs.GetEntries();
+  for (const HistDefs::Entry & histDef : histDefEntries) {
+    m_histSetInitial.push_back( new Hist(histDef) );
+    m_histSetTarget.push_back( new Hist(histDef) );
+  }
+  
+}
+  
+
 Node::STATUS Node::Status() const
 {
 
   return m_status;
+
+}
+  
+
+void Node::SetStatus(Node::STATUS status)
+{
+
+  m_status = status;
 
 }
   
@@ -89,37 +123,23 @@ const Branch * Node::OutputBranch() const
 }
 
 
-void Node::Build(TTree * initial, TTree * target, const HistDefs & histDefs, Branch *& b1, Branch *& b2, const std::vector<const DecisionTree *> & decisionTrees)
+void Node::Build(Branch *& b1, Branch *& b2)
 {
 
-  // check if this node can be build
-  static int maxLayers = m_store->get<int>("MaxTreeLayers");
-  if ( NumberOfLayers() >= maxLayers ) {
-    m_log << Log::VERBOSE << "Build() : Too many layers before node to build it - finalizing it instead" << Log::endl();
-    m_status = FINAL;
-    return;
+  // get number of histograms
+  int nhist = m_histSetInitial.size();
+  if ( nhist == 0 ) {
+    m_log << Log::ERROR << "Build() : No histograms to fill!" << Log::endl();
+    throw(0);
   }
-  
-  // declare target and initial histograms
-  std::vector<Hist *> histSetInitial;
-  std::vector<Hist *> histSetTarget;
-  const std::vector<HistDefs::Entry> & histDefEntries = histDefs.GetEntries();
-  for (const HistDefs::Entry & histDef : histDefEntries) {
-    histSetInitial.push_back( new Hist(histDef) );
-    histSetTarget.push_back( new Hist(histDef) );
-  }
-  
-  // fill histograms
-  FillHistograms(target , histSetTarget);
-  FillHistograms(initial, histSetInitial, &decisionTrees);
   
   // calculate cut-values and chisquares
   std::vector<Summary *> nodeSummaryVec;
   static int minEvents = m_store->get<int>("MinEventsNode");
-  for (unsigned int i = 0; i < histDefEntries.size(); ++i) {
+  for (int i = 0; i < nhist; ++i) {
 
-    Hist * histTarg = histSetTarget.at(i);
-    Hist * histInit = histSetInitial.at(i);
+    Hist * histTarg = m_histSetTarget.at(i);
+    Hist * histInit = m_histSetInitial.at(i);
 
     const TH1F * rootHistTarg = histTarg->ROOTHist();
     const TH1F * rootHistInit = histInit->ROOTHist();
@@ -252,66 +272,25 @@ void Node::Build(TTree * initial, TTree * target, const HistDefs & histDefs, Bra
 }
 
 
-void Node::FillHistograms(TTree * tree, std::vector<Hist *> histSet, const std::vector<const DecisionTree *> * decisionTrees) const
+void Node::FillInitial(float weight)
 {
 
-  // prepare for loop over tree entries
-  long maxEvent = tree->GetEntries();
-  long reportFrac = maxEvent/(maxEvent > 100000 ? 10 : 1) + 1;
-  m_log << Log::VERBOSE << "FillHistograms() : Looping over events (" << tree->GetName() << ") : "  << maxEvent << Log::endl();
-  std::clock_t start = std::clock();
-
-  // Loop over ree entries
-  for (long ievent = 0; ievent < maxEvent; ++ievent) {
-
-    // print progress
-    if( ievent > 0 && ievent % reportFrac == 0 ) {
-      double duration     = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
-      double frequency    = static_cast<double>(ievent) / duration;
-      double timeEstimate = static_cast<double>(maxEvent - ievent) / frequency;
-      m_log << Log::VERBOSE << "FillHistograms() : ---> processed : " << std::setw(4) << 100*ievent/maxEvent << "\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time : " << std::setw(4) << static_cast<int>(timeEstimate) << " sec"<< Log::endl(); 
-    }
-    
-    // get event
-    tree->GetEntry( ievent );
-
-    // apply cuts
-    bool pass = true;
-    const Branch * b = InputBranch();
-    while ( b ) {
-      if ( ! b->Pass() ) {
-	pass = false;
-	break;
-      }
-      b = b->InputNode()->InputBranch();
-    }
-    if ( ! pass ) continue;
-
-    // get event weight
-    static const std::string & eventWeightName = m_store->get<std::string>("EventWeightVariableName");
-    static float & eventWeight = Event::Instance().GetVar<float>(eventWeightName);
-    
-    // get weights from previous trees
-    float dtreeWeight = 1.;
-    if ( decisionTrees ) {
-      for (const DecisionTree * dtree : *decisionTrees) {
-	dtreeWeight *= dtree->GetWeight();
-      }
-    }
-    
-    // fill histograms
-    for (Hist * hist : histSet) {
-      hist->Fill(eventWeight*dtreeWeight);
-    }
-    
+  // fill histograms
+  for (Hist * hist : m_histSetInitial) {
+    hist->Fill(weight);
   }
 
-  // print out
-  double duration  = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
-  double frequency = static_cast<double>(maxEvent) / duration;
-  m_log << Log::VERBOSE<< "FillHistograms() : ---> processed :  100\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time :    0 sec"<< Log::endl(); 
+}
 
-  
+
+void Node::FillTarget(float weight)
+{
+
+  // fill histograms
+  for (Hist * hist : m_histSetTarget) {
+    hist->Fill(weight);
+  }
+
 }
 
 
@@ -345,25 +324,6 @@ float Node::GetWeight() const
 {
 
   return m_weight;
-
-}
-
-
-int Node::NumberOfLayers() const
-{
-
-  // initialize return value
-  int layers = 0;
-
-  // propagate up the tree starting from the input node and count layers before reaching the first node
-  const Branch * b = InputBranch();
-  while ( b ) {
-    ++layers;
-    b = b->InputNode()->InputBranch();
-  }
-
-  // return nmber of layers
-  return layers;
 
 }
 
