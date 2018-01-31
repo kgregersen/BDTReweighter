@@ -43,8 +43,20 @@ int main(int argc, char * argv[]) {
   log << Log::INFO << "Opening file " << weightsfilename << Log::endl();
   weightsfile.open(weightsfilename.c_str());
 
-  // vector containing weights and associated cuts
-  std::vector<std::pair<float, std::vector<const Branch *> > > weights;
+  // weights and trees
+  struct Weight {
+  public:
+    Weight(float _weight, const std::vector<const Branch *> & _branches) : weight(_weight), branches(_branches) {}
+    const float weight;
+    const std::vector<const Branch *> branches;
+  };
+  struct Tree {
+  public:
+    Tree(const std::vector<Weight> & _weights) : weights(_weights) {}
+    const std::vector<Weight> weights;
+  };
+  std::vector<Tree> trees;
+  std::vector<Weight> weights;
 
   // read lines
   log << Log::INFO << "Reading file " << weightsfilename << Log::endl();
@@ -59,8 +71,17 @@ int main(int argc, char * argv[]) {
     std::getline( weightsfile , line );
     log << Log::DEBUG << line << Log::endl();
 
+    // check if we are at new tree
+    if (line.size() >= 14 && line.substr(2,13) == "Decision Tree") {
+      if (weights.size()) {
+	trees.push_back( Tree(weights) );
+      }
+      weights.clear();
+      continue;
+    }
+    
     // only consider lines that starts with 'weight='
-    if (line.size() == 0 || line.substr(0,7) != "weight=") continue;
+    if ( ! (line.size() >= 7 && line.substr(0,7) == "weight=") ) continue;
 
     // retrieve weight
     size_t pos = line.find(':') + 1;
@@ -69,8 +90,10 @@ int main(int argc, char * argv[]) {
     float weight;
     iss >> weight;
 
+    // braches for this weight
     std::vector<const Branch *> branches;
-    
+
+    // retrieve cuts from this line and convert them to branches
     while (pos != std::string::npos) {
 
       size_t next = line.find_first_of('|',pos);
@@ -102,7 +125,7 @@ int main(int argc, char * argv[]) {
 
     }
 
-    weights.push_back( std::make_pair(weight, branches) );
+    weights.push_back( Weight(weight, branches) );
         
   }
 
@@ -126,7 +149,7 @@ int main(int argc, char * argv[]) {
 
   // create event object and connect TTrees
   Event & event = Event::Instance(config);
-  event.ConnectAllVariables(initial);
+  event.ConnectAllVariables(initial, false);
 
   // BDT event weight
   float BDTEventWeight;
@@ -156,20 +179,27 @@ int main(int argc, char * argv[]) {
 
     // apply cuts
     BDTEventWeight = 1.;
-    for (unsigned int i = 0; i < weights.size(); ++i) {
+    for (const Tree & t : trees) {
 
-      // check if event falls on the i'th node
-      bool pass = true;
-      for (const Branch * b : weights.at(i).second) {
-	if ( ! b->Pass() ) {
-	  pass = false;
+      for (const Weight & w : t.weights) {
+	
+	// check if event falls on the i'th node
+	bool pass = true;
+	for (const Branch * b : w.branches) {
+	  if ( ! b->Pass() ) {
+	    pass = false;
+	    break;
+	  }
+	}
+	
+	// use weight if event falls on this node, and break out of this tree
+	if ( pass ) {
+	  BDTEventWeight *= w.weight;     
 	  break;
 	}
+
       }
 
-      // use weight if event falls on this node
-      if ( pass ) BDTEventWeight *= weights.at(i).first;     
-      
     }
 
     // fill BDT event weight

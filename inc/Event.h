@@ -52,7 +52,7 @@ public:
   ~Event() {}
   
   // connect all
-  void ConnectAllVariables(TTree * tree);
+  void ConnectAllVariables(TTree * tree, bool disableOtherBranches = true);
 
   // get variable (non-const)
   template <typename T>

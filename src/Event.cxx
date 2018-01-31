@@ -27,12 +27,13 @@ Event::Event(const Store * store) :
 }
 
 
-void Event::ConnectAllVariables(TTree * tree)
+void Event::ConnectAllVariables(TTree * tree, bool disableOtherBranches)
 {
 
   // disable all branches
-  tree->SetBranchStatus("*",0);
-
+  if (disableOtherBranches) tree->SetBranchStatus("*",0);
+  else tree->SetBranchStatus("*",1);
+  
   // connect reweighting variables
   #include "VARIABLES"
 
