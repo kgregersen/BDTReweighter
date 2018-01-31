@@ -21,7 +21,7 @@
 int main(int argc, char * argv[]) {
 
   // get confiuration file
-  std::string configpath = "config.txt";
+  std::string configpath = "config_apply.txt";
   Store * config = Store::createStore(configpath.c_str());
 
   // initialize log
@@ -37,8 +37,7 @@ int main(int argc, char * argv[]) {
   Variables::Initialize();
 
   // open BDT weights file
-  std::string weightsfilename = "BDTweights.txt";
-  config->getif<std::string>("WeightsFileName", weightsfilename);
+  std::string weightsfilename = config->get<std::string>("WeightsFileName");
   std::ifstream weightsfile;
   log << Log::INFO << "Opening file " << weightsfilename << Log::endl();
   weightsfile.open(weightsfilename.c_str());

@@ -1,0 +1,13 @@
+
+# I/O settings
+string WeightsFileName         = BDTweights.txt
+string InputFileName           = test_VR2.root
+string InputTreeNameInitial    = data_SemiTagged
+string InputTreeNameTarget     = data_FullyTagged
+
+# additional variables
+string BDTEventWeightName      = BDTWeight
+string EventWeightVariableName = weight
+
+# misc. settings
+string PrintLevel              = VERBOSE
