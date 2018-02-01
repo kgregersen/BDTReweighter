@@ -21,8 +21,11 @@
 
 int main(int argc, char * argv[]) {
 
+  // keep track of time
+  std::clock_t start = std::clock();
+
   // get confiuration file
-  std::string configpath = "config.txt";
+  std::string configpath = "config_calc.txt";
   Store * config = Store::createStore(configpath.c_str());
 
   // initialize log
@@ -118,8 +121,12 @@ int main(int argc, char * argv[]) {
   // close file
   outfile.close();
   
+  // time spent on growing tree
+  double duration = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
   
-  // and we're done!
+  // done!
+  log << Log::INFO << "And we're done !!" << Log::endl();
+  log << Log::INFO << "Total time spent  : " << duration << " sec" << Log::endl();
   return 0;
   
 }

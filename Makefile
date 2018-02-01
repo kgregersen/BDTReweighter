@@ -36,7 +36,7 @@ CPPOBJ=$(CPPSRC:$(SRC)/%.cpp=$(OBJ)/%.o)
 CPPEXE=$(CPPSRC:$(SRC)/%.cpp=$(BIN)/%)
 
 # Set default target
-all: $(CPPEXE)
+all: $(CPPEXE) $(CPPSRC) $(CXXSRC)
 
 
 # Generic rule for CXXOBJ

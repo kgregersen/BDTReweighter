@@ -1,7 +1,7 @@
 
 # I/O settings
 string WeightsFileName         = BDTweights.txt
-string InputFileName           = test_VR2.root
+string InputFileName           = test_CR.root
 string InputTreeNameInitial    = data_SemiTagged
 string InputTreeNameTarget     = data_FullyTagged
 

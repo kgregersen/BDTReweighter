@@ -1,6 +1,6 @@
 
 # I/O settings
-string OutputFileName          = BDTweights.txt
+string OutputFileName          = BDTweights_CR_test.txt
 string InputFileName           = test_CR_orig.root
 string InputTreeNameInitial    = data_SemiTagged
 string InputTreeNameTarget     = data_FullyTagged
@@ -10,11 +10,11 @@ string EventWeightVariableName = weight
 
 # hyperparameters
 int    NumberOfTrees           = 20
-int    MaxTreeLayers           = 5
+int    MaxTreeLayers           = 10
 int    MinEventsNode           = 250
-float  LearningRate            = 0.25
+float  LearningRate            = 0.5
 float  SamplingFraction        = 0.7       
 float  SamplingFractionSeed    = 314314       
 
 # misc. settings
-string PrintLevel              = VERBOSE
+string PrintLevel              = INFO
