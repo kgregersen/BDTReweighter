@@ -94,6 +94,8 @@ Store * Store::createStore(const char * filename)
   
   std::string line;
   int lineNumber = 0;
+
+  std::vector<std::string> configLines;
   
   while ( ! steerFile.eof() ) {
 
@@ -125,6 +127,9 @@ Store * Store::createStore(const char * filename)
       store = 0;
       break;
     }
+
+    // store line in string
+    configLines.push_back(line);
     
     bool wrongType = false;
     bool wrongNumTokens = false;
@@ -185,7 +190,9 @@ Store * Store::createStore(const char * filename)
     }
 
   }
-    
+
+  store->put<std::vector<std::string> >("ConfigFile", configLines);
+  
   return store;
   
 }
@@ -225,3 +232,14 @@ void Store::flush()
 }
 
 
+void Store::write(std::ofstream & file) const
+{
+
+  const std::vector<std::string> & lines = get<std::vector<std::string> >("ConfigFile");
+  
+  for (const std::string & line : lines) {
+    file << line << "\n";
+  }
+  file << "\n";
+  
+}

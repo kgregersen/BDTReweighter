@@ -27,14 +27,12 @@ public:
   public:
     VarBase() {}
     virtual ~VarBase() {}
-    virtual TString Type() const = 0;
   };
   template<typename T>
   class Var : public VarBase {
   public:
     Var() : value() {}
     Var(T v) : value(v) {}
-    TString Type() const { return typeid(value).name(); }
     T value;
   };
 

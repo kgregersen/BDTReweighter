@@ -103,17 +103,21 @@ int main(int argc, char * argv[]) {
   std::tm* now_tm= std::gmtime(&now);
   char buf[200];
   std::strftime(buf, 200, "%a, %d %b %y %T %z", now_tm);
-  outfile << "# Time stamp : " << buf << "\n";
+  outfile << "Time stamp : " << buf << "\n\n";
 
   // print variables to file
-  outfile << " # Variables  : ";
+  outfile << "Variables  : ";
   const std::vector<const Variable *> & variables = Variables::Get();
   for (const Variable * var : variables) {
     outfile << var->Name() << ",";
   }
-  outfile << "\n";
+  outfile << "\n\n"; 
+
+  // print config to file
+  outfile << "ConfigFile : \n";
+  config->write(outfile);
   
-  // write decision trees to file
+  // print decision trees to file
   for (const DecisionTree * dtree : decisionTrees) {
     dtree->Write( outfile );
   }

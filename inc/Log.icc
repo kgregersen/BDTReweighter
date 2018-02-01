@@ -18,7 +18,7 @@ inline Log & Log::operator<<(const Log::LEVEL & level) {
   
   if ( m_currentlevel < m_printlevel ) return *this;
   
-  m_outstream << std::setw(15) << std::left << m_name;
+  m_outstream << std::setw(20) << std::left << m_name;
   
   switch(level) {
   case DEBUG:

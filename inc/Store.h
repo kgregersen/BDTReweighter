@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <fstream>
 
 // Framework includes
 #include "Log.h"
@@ -48,6 +49,8 @@ class Store {
   // flush store (remove all entries)
   void flush();
 
+  // write store to file
+  void write(std::ofstream & file) const;
   
   // create store from card file
   static Store * createStore(const char * filename);
