@@ -191,7 +191,7 @@ Store * Store::createStore(const char * filename)
 
   }
 
-  store->put<std::vector<std::string> >("ConfigFile", configLines);
+  if (store) store->put<std::vector<std::string> >("ConfigFile", configLines);
   
   return store;
   

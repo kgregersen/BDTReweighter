@@ -5,6 +5,7 @@
 #include "Event.h"
 #include "Store.h"
 #include "Log.h"
+#include "Method.h"
 
 // stl includes
 #include <vector>
@@ -25,7 +26,7 @@ int main(int argc, char * argv[]) {
   Store * config = Store::createStore(configpath.c_str());
 
   // initialize log
-  Log log("BDTApply");
+  Log log("ApplyWeights");
   std::string str_level;
   config->getif<std::string>("PrintLevel", str_level);
   if (str_level.length() > 0) {
@@ -33,10 +34,19 @@ int main(int argc, char * argv[]) {
     log.SetLevel(level);
   }
 
+  // set method
+  std::string str_method;
+  config->getif<std::string>("Method", str_method);
+  if (str_level.length() == 0) {
+    log << Log::ERROR << "Method not specified! Syntax : 'string Method = <method-name>'. Available methods: BDT, RF." << Log::endl();
+    return 0;    
+  }
+  Method::TYPE method = Method::Type(str_method);
+
   // initialize variables
   Variables::Initialize();
 
-  // open BDT weights file
+  // open weights file
   std::string weightsfilename = config->get<std::string>("WeightsFileName");
   std::ifstream weightsfile;
   log << Log::INFO << "Opening file " << weightsfilename << Log::endl();
@@ -89,7 +99,7 @@ int main(int argc, char * argv[]) {
     float weight;
     iss >> weight;
 
-    // braches for this weight
+    // branches for this weight
     std::vector<const Branch *> branches;
 
     // retrieve cuts from this line and convert them to branches
@@ -151,10 +161,10 @@ int main(int argc, char * argv[]) {
   event.ConnectAllVariables(initial, false);
 
   // BDT event weight
-  float BDTEventWeight;
-  std::string BDTEventWeightName = "BDTWeight";
-  config->getif<std::string>("BDTEventWeightName", BDTEventWeightName);
-  TBranch * b_BDTEventWeight = initial->Branch(BDTEventWeightName.c_str(), &BDTEventWeight);
+  float weight;
+  std::string weightName = "BDTWeight";
+  config->getif<std::string>("WeightName", weightName);
+  TBranch * b_weight = initial->Branch(weightName.c_str(), &weight);
 
   // prepare for loop over tree entries
   long maxEvent = initial->GetEntries();
@@ -176,8 +186,11 @@ int main(int argc, char * argv[]) {
     // get event
     initial->GetEntry( ievent );
 
+    // initialise weight
+    if      (method == Method::BDT) weight = 1.;
+    else if (method == Method::RF ) weight = 0.;
+
     // apply cuts
-    BDTEventWeight = 1.;
     for (const Tree & t : trees) {
 
       for (const Weight & w : t.weights) {
@@ -193,7 +206,8 @@ int main(int argc, char * argv[]) {
 	
 	// use weight if event falls on this node, and break out of this tree
 	if ( pass ) {
-	  BDTEventWeight *= w.weight;     
+	  if      (method == Method::BDT) weight *= w.weight;
+	  else if (method == Method::RF ) weight += w.weight;
 	  break;
 	}
 
@@ -201,8 +215,13 @@ int main(int argc, char * argv[]) {
 
     }
 
-    // fill BDT event weight
-    b_BDTEventWeight->Fill();
+    // finalise weight
+    if (method == Method::RF) {
+      weight /= static_cast<float>( trees.size() );
+    }
+    
+    // fill weight
+    b_weight->Fill();
     
   }
 

@@ -1,6 +1,6 @@
 
 # I/O settings
-string OutputFileName          = BDTweights_CR_2.txt
+string OutputFileName          = RFweights_CR_2.txt
 string InputFileName           = test_CR_orig.root
 string InputTreeNameInitial    = data_SemiTagged
 string InputTreeNameTarget     = data_FullyTagged
@@ -9,12 +9,14 @@ string InputTreeNameTarget     = data_FullyTagged
 string EventWeightVariableName = weight
 
 # hyperparameters
-int    NumberOfTrees           = 30
-int    MaxTreeLayers           = 100
-int    MinEventsNode           = 100
+string Method                  = RF
+int    NumberOfTrees           = 50
+int    MaxTreeLayers           = 15
+int    MinEventsNode           = 20
 float  LearningRate            = 0.5
-float  SamplingFraction        = 0.7       
-float  SamplingFractionSeed    = 314314       
+float  SamplingFraction        = 0.7   
+float  SamplingFractionSeed    = 3143141       
+float  FeatureSamplingFraction = 0.25
 
 # misc. settings
 string PrintLevel              = INFO

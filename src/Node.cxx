@@ -11,9 +11,11 @@
 #include <string>
 #include <limits>
 #include <cmath>
+#include <algorithm>
 
 // ROOT includes
 #include "TTree.h"
+#include "TRandom3.h"
 
 
 
@@ -32,15 +34,18 @@ Node::Node(const Store * store, Branch * input) :
 
   // set this node as output node of input branch, and get sum of events from input branch
   if ( input ) {
+
     input->SetOutputNode(this);
     m_sumInitial = input->SumInitial();
     m_sumTarget  = input->SumTarget();
+
     // set to FINAL if there are fewer than twice the min number of events on the node since then it can't be split
     // (there still exist other cases where it can't be split, but we have to fill the histograms to identify these...)
     static int minEvents = m_store->get<int>("MinEventsNode");
     if ( m_sumTarget < 2.*minEvents || m_sumInitial < 2.*minEvents) {
       m_status = FINAL;
     }
+
   }
 
   // set log level
@@ -65,7 +70,7 @@ Node::~Node()
 }
 
 
-void Node::Initialize(const HistDefs & histDefs)
+void Node::Initialize(const HistDefs & histDefs, Method::TYPE method)
 {
 
   // check if this node was already initialized
@@ -74,12 +79,40 @@ void Node::Initialize(const HistDefs & histDefs)
     throw(0);
   }
   
-  // declare target and initial histograms
+  // get variables used for splitting the tree
   const std::vector<HistDefs::Entry> & histDefEntries = histDefs.GetEntries();
-  for (const HistDefs::Entry & histDef : histDefEntries) {
-    m_histSetInitial.push_back( new Hist(histDef) );
-    m_histSetTarget.push_back( new Hist(histDef) );
+  std::vector<unsigned int> indices;
+  if (method == Method::RF) {
+
+    // Random Forest uses "feature sampling", only using random subset of the variables to grow the decision tree
+    static int samplingFractionSeed = m_store->get<float>("SamplingFractionSeed");
+    static float featSamplingFraction = m_store->get<float>("FeatureSamplingFraction");
+    unsigned int nFeat = static_cast<unsigned int>(featSamplingFraction*histDefEntries.size());
+    while (indices.size() < nFeat) {
+      static TRandom3 ran( samplingFractionSeed );
+      unsigned int index = static_cast<unsigned int>(ran.Rndm()*histDefEntries.size());
+      if ( std::find(indices.begin(), indices.end(), index) == indices.end() ) {
+	indices.push_back( index );
+      }
+    }
+    
   }
+  else {
+
+    // use all variables
+    for (unsigned int index = 0; index < histDefEntries.size(); ++index) {
+      indices.push_back( index );
+    }
+
+  }
+
+  // declare target and initial histograms for each variable
+  for (unsigned int index : indices) {
+    const HistDefs::Entry & histDef = histDefEntries.at(index);
+    m_histSetInitial.push_back( new Hist(histDef) );
+    m_histSetTarget.push_back( new Hist(histDef) ); 
+  }
+  
   
 }
   
@@ -129,7 +162,7 @@ void Node::Build(Branch *& b1, Branch *& b2)
   // get number of histograms
   int nhist = m_histSetInitial.size();
   if ( nhist == 0 ) {
-    m_log << Log::ERROR << "Build() : No histograms to fill!" << Log::endl();
+    m_log << Log::ERROR << "Build() : No histograms!" << Log::endl();
     throw(0);
   }
   
@@ -166,6 +199,8 @@ void Node::Build(Branch *& b1, Branch *& b2)
       Double_t sumInitHigh = rootHistInit->IntegralAndError(xbin + 1, -1  , sumInitHighErr);
       Double_t sumTargHigh = rootHistTarg->IntegralAndError(xbin + 1, -1  , sumTargHighErr);
             
+      m_log << Log::DEBUG << "sumInitLow = " << sumInitLow << "  sumTargLow = " << sumTargLow << "  sumInitHigh = " << sumInitHigh << "  sumTargHigh = " << sumTargHigh << Log::endl();
+      
       // check min events on potential sub-nodes
       if (sumInitLow < minEvents || sumInitHigh < minEvents || sumTargLow < minEvents || sumTargHigh < minEvents ) continue;
 
@@ -267,6 +302,14 @@ void Node::Build(Branch *& b1, Branch *& b2)
   for (Summary * nodeSum : nodeSummaryVec) {
     delete nodeSum;
     nodeSum = 0;
+  }
+  for (Hist * hist : m_histSetInitial) {
+    delete hist;
+    hist = 0;
+  }
+  for (Hist * hist : m_histSetTarget) {
+    delete hist;
+    hist = 0;
   }
   
 }

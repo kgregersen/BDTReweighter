@@ -7,6 +7,7 @@
 
 // stl includes
 #include <vector>
+#include <algorithm>
 
 // ROOT includes
 #include "TTree.h"
@@ -14,9 +15,12 @@
 
 
 
-DecisionTree::DecisionTree(TTree * initial, TTree * target, const Store * store, const HistDefs & histDefs) :
+DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method, const Store * store, const HistDefs & histDefs) :
   m_initial(initial),
   m_target(target),
+  m_indicesInitial(0),
+  m_indicesTarget(0),
+  m_method(method),
   m_histDefs(histDefs),
   m_log("DecisionTree"),
   m_store(store)
@@ -28,6 +32,44 @@ DecisionTree::DecisionTree(TTree * initial, TTree * target, const Store * store,
     Log::LEVEL level = Log::StringToLEVEL(str_level);
     m_log.SetLevel(level);
   }
+
+  m_log << Log::INFO << "DecisionTree() : Preparing sorted vector of event indices" << Log::endl();
+  long maxEventInit = m_initial->GetEntries();
+  long maxEventTarg = m_target->GetEntries();
+  static float samplingFraction   = m_store->get<float>("SamplingFraction");
+  static int samplingFractionSeed = m_store->get<float>("SamplingFractionSeed");
+  static TRandom3 ran( samplingFractionSeed );
+  if (m_method == Method::BDT) {
+    std::vector<long> indices;
+    indices.reserve(maxEventInit);
+    // get unique vector of indices to subset of events
+    // ---> initial
+    for (long ievent = 0; ievent < maxEventInit; ++ievent) indices.push_back(ievent);
+    for (long ievent = 0; ievent < maxEventInit; ++ievent) std::swap(indices[ievent], indices[static_cast<int>(ran.Rndm()*(indices.size() - 1))] );
+    m_indicesInitial = new std::vector<long>(indices.begin(), indices.begin() + samplingFraction*maxEventInit);
+    // ---> target
+    indices.clear();
+    indices.reserve(maxEventTarg);
+    for (long ievent = 0; ievent < maxEventTarg; ++ievent) indices.push_back(ievent);
+    for (long ievent = 0; ievent < maxEventTarg; ++ievent) std::swap(indices[ievent], indices[static_cast<int>(ran.Rndm()*(indices.size() - 1))] );
+    m_indicesTarget = new std::vector<long>(indices.begin(), indices.begin() + samplingFraction*maxEventTarg);
+  }
+  if (m_method == Method::RF) {
+    // get non-unique vector of indices to subset of events
+    // ---> initial
+    m_indicesInitial = new std::vector<long>();
+    m_indicesInitial->reserve(samplingFraction*maxEventInit);
+    while ( m_indicesInitial->size() < samplingFraction*maxEventInit ) m_indicesInitial->push_back( static_cast<long>(ran.Rndm()*maxEventInit) );
+    // ---> target
+    m_indicesTarget = new std::vector<long>();
+    m_indicesTarget->reserve(samplingFraction*maxEventInit);
+    while ( m_indicesTarget->size() < samplingFraction*maxEventTarg ) m_indicesTarget->push_back( static_cast<long>(ran.Rndm()*maxEventTarg) );
+  }
+  // need to sort to optimise reading of TTree (TTree::GetEntry(index) reads in chunks of sequential data, so we don't want to jump around in indices...)
+  std::sort(m_indicesInitial->begin(), m_indicesInitial->end());
+  std::sort(m_indicesTarget->begin(), m_indicesTarget->end());
+  m_log << Log::INFO << "DecisionTree() : Sorted vector of indices created!" << Log::endl();
+
   
 }
 
@@ -43,7 +85,7 @@ void DecisionTree::GrowTree(const std::vector<const DecisionTree *> & decisionTr
 
   // print info
   static int counter = 1;
-  m_log << Log::INFO << "GrowTree() : Decision Tree " << counter++ << Log::endl();
+  m_log << Log::INFO << "GrowTree() : Decision Tree " << counter++ << ", method = " << Method::String(m_method) << Log::endl();
 
   // keep track of time
   std::clock_t start = std::clock();
@@ -64,7 +106,7 @@ void DecisionTree::GrowTree(const std::vector<const DecisionTree *> & decisionTr
     if ( nlayers >= maxLayers ) {
 
       // print verbose message
-      m_log << Log::VERBOSE << "Build() : Max layers reached - finalizing nodes!" << Log::endl();
+      m_log << Log::VERBOSE << "GrowTree() : Max layers reached - finalizing nodes!" << Log::endl();
 
       // set status of nodes to FINAL and add to decision tree
       for (Node * node : layer) {
@@ -79,13 +121,13 @@ void DecisionTree::GrowTree(const std::vector<const DecisionTree *> & decisionTr
 
     // initialise histograms on nodes
     for (Node * node : layer) {
-      node->Initialize( m_histDefs );
+      node->Initialize(m_histDefs, m_method);
     }
-
+      
     // fill nodes (first target, then initial)
-    FillNodes(layer);
-    FillNodes(layer, &decisionTrees); 
-
+    FillNodes(layer, 0);
+    FillNodes(layer, 1, &decisionTrees); 
+    
     // prepare vector for next layer of nodes
     std::vector<Node *> nextLayer;
         
@@ -131,57 +173,50 @@ void DecisionTree::GrowTree(const std::vector<const DecisionTree *> & decisionTr
     }
     static float learningRate = m_store->get<float>("LearningRate");
     double w = exp(learningRate*log(target/initial));
-    //float w = target/initial; 
-    weights.at(i)       = w;
-    sumOfWeights       += w*initial;
-    sumTarget          += target;
+    weights.at(i)  = w;
+    sumOfWeights  += w*initial;
+    sumTarget     += target;
   }
   for (unsigned int i = 0; i < weights.size(); ++i) {
     finalNodes.at(i)->SetAndLockWeight( sumTarget*weights[i]/sumOfWeights );
-    //finalNodes.at(i)->SetAndLockWeight( weights[i] );
   }
   
   // time spent on growing tree
   double duration = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
   
-  // print info
+  // print tree to screen
   m_log << Log::INFO << "GrowTree() : ----------------> INFO <----------------" << Log::endl();
   m_log << Log::INFO << "GrowTree() : Time spent  : " << duration << " sec" << Log::endl();
   m_log << Log::INFO << "GrowTree() : Final nodes : " << finalNodes.size() << " (out of " << m_nodes.size() << ")" << Log::endl();
-  for (unsigned int i = 0; i < finalNodes.size(); ++i) {
-
-    const Node * node = finalNodes[i];
-
+  for (unsigned int i = 0; i < finalNodes.size(); ++i) {   
     m_log << Log::INFO << "GrowTree() : ---> Weight = " << std::setw(10) << std::left << weights.at(i) << " Cuts = ";
-    const Branch * b = node->InputBranch();
-    while ( b ) {
-    
+    const Branch * b = finalNodes.at(i)->InputBranch();
+    while ( b ) {     
       // get cut object
       const Branch::Cut * cut = b->CutObject();
       const Branch::Smaller * lt = dynamic_cast<const Branch::Smaller *>(cut);
       const Branch::Greater * gt = dynamic_cast<const Branch::Greater *>(cut);    
-      
       // check if valid
       if ( (lt && gt) || (!lt && !gt) ) {
 	m_log << Log::endl();
 	m_log << Log::ERROR << "GrowTree() : Couldn't determine if cut is greater or smaller!" << Log::endl();
 	throw(0);
       }
-    
       // print cut
       m_log << cut->GetVariable()->Name() << (lt ? "<" : ">") << cut->CutValue() << "|";
-      
       // update branch
       b = b->InputNode()->InputBranch();
-      
     }
-    
     m_log << Log::endl();
-
   }
-  
   m_log << Log::INFO << "GrowTree() : ----------------------------------------" << Log::endl();
 
+  // clean up
+  delete m_indicesInitial;
+  delete m_indicesTarget;
+  m_indicesInitial = 0;
+  m_indicesTarget = 0;
+  
 }
 
 
@@ -202,25 +237,26 @@ void DecisionTree::CreateNode(Branch * input, std::vector<Node *> & nextLayer)
 }
 
 
-void DecisionTree::FillNodes(std::vector<Node *> buildNodes, const std::vector<const DecisionTree *> * decisionTrees) const
+void DecisionTree::FillNodes(std::vector<Node *> layer, bool treeSwitch, const std::vector<const DecisionTree *> * decisionTrees) const
 {
 
-  // set TTree - if past decision trees are provided we pick the 'initial' tree, otherwise the 'target' tree
+  // get TTree
   TTree * tree = 0;
-  if ( decisionTrees ) {
+  const std::vector<long> * indices = 0;
+  if (treeSwitch) {
     tree = m_initial;
+    indices = m_indicesInitial;
   }
   else {
     tree = m_target;
+    indices = m_indicesTarget;
   }
   
-  // prepare for loop over tree entries
-  long maxEvent = tree->GetEntries();
-  long reportFrac = maxEvent/(maxEvent > 100000 ? 10 : 1) + 1;
-  m_log << Log::VERBOSE << "FillHistograms() : Looping over events (" << tree->GetName() << ") : "  << maxEvent << Log::endl();
+  // Loop over TTree entries
   std::clock_t start = std::clock();
-
-  // Loop over ree entries
+  long maxEvent = indices->size();
+  long reportFrac = maxEvent/(maxEvent > 100000 ? 10 : 1) + 1;
+  m_log << Log::VERBOSE << "FillNodes() : Looping over events (" << tree->GetName() << ") : "  << maxEvent << Log::endl();
   for (long ievent = 0; ievent < maxEvent; ++ievent) {
 
     // print progress
@@ -228,20 +264,14 @@ void DecisionTree::FillNodes(std::vector<Node *> buildNodes, const std::vector<c
       double duration     = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
       double frequency    = static_cast<double>(ievent) / duration;
       double timeEstimate = static_cast<double>(maxEvent - ievent) / frequency;
-      m_log << Log::VERBOSE << "FillHistograms() : ---> processed : " << std::setw(4) << 100*ievent/maxEvent << "\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time : " << std::setw(4) << static_cast<int>(timeEstimate) << " sec"<< Log::endl(); 
+      m_log << Log::VERBOSE << "FillNodes() : ---> processed : " << std::setw(4) << 100*ievent/maxEvent << "\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time : " << std::setw(4) << static_cast<int>(timeEstimate) << " sec"<< Log::endl(); 
     }
     
     // get event
-    tree->GetEntry( ievent );
-    
-    // apply sampling rate
-    static float samplingFraction   = m_store->get<float>("SamplingFraction");
-    static int samplingFractionSeed = m_store->get<float>("SamplingFractionSeed");
-    static TRandom3 ran( samplingFractionSeed );
-    if ( ran.Rndm() > samplingFraction ) continue;
-    
+    tree->GetEntry( indices->at(ievent) );
+
     // loop over nodes
-    for (Node * node : buildNodes) {
+    for (Node * node : layer) {
     
       // apply cuts
       bool pass = true;
@@ -257,15 +287,26 @@ void DecisionTree::FillNodes(std::vector<Node *> buildNodes, const std::vector<c
       
       // get event weight
       static const std::string & eventWeightName = m_store->get<std::string>("EventWeightVariableName");
-      static float & eventWeight = Event::Instance().GetVar<float>(eventWeightName);
+      static const float & eventWeight = Event::Instance().GetVar<float>(eventWeightName);
       
-      // get weights from previous trees
-      float dtreeWeight = 1.;
-      if ( decisionTrees ) {
-	for (const DecisionTree * dtree : *decisionTrees) {
-	  dtreeWeight *= dtree->GetWeight();
+      // fill nodes
+      if ( treeSwitch ) {
+
+	if ( m_method == Method::BDT ) {
+	  if ( ! decisionTrees ) {
+	    m_log << Log::ERROR << "FillNodes() : Previous decision trees not provided for BDT!" << Log::endl();
+	    throw(0);
+	  }
+	  float dtreeWeight = 1.;
+	  for (const DecisionTree * dtree : *decisionTrees) {
+	    dtreeWeight *= dtree->GetWeight();
+	  }
+	  node->FillInitial(eventWeight*dtreeWeight);	  
 	}
-	node->FillInitial(eventWeight*dtreeWeight);
+	else {
+	  node->FillInitial(eventWeight);
+	}
+	
       }
       else {
 	node->FillTarget(eventWeight);
@@ -281,7 +322,7 @@ void DecisionTree::FillNodes(std::vector<Node *> buildNodes, const std::vector<c
   // print out
   double duration  = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
   double frequency = static_cast<double>(maxEvent) / duration;
-  m_log << Log::VERBOSE<< "FillHistograms() : ---> processed :  100\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time :    0 sec"<< Log::endl(); 
+  m_log << Log::VERBOSE<< "FillNodes() : ---> processed :  100\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time :    0 sec"<< Log::endl(); 
   
 }
 
@@ -425,3 +466,4 @@ void DecisionTree::Write(std::ofstream & file) const
 
   
 }
+

@@ -6,6 +6,7 @@
 #include "HistDefs.h"
 #include "Store.h"
 #include "Log.h"
+#include "Method.h"
 
 // stl includes
 #include <vector>
@@ -27,9 +28,10 @@ int main(int argc, char * argv[]) {
   // get confiuration file
   std::string configpath = "config_calc.txt";
   Store * config = Store::createStore(configpath.c_str());
-
+  if ( ! config ) return 0;
+  
   // initialize log
-  Log log("BDTCalculate");
+  Log log("CalculateWeights");
   std::string str_level;
   config->getif<std::string>("PrintLevel", str_level);
   if (str_level.length() > 0) {
@@ -37,6 +39,15 @@ int main(int argc, char * argv[]) {
     log.SetLevel(level);
   }
 
+  // set method
+  std::string str_method;
+  config->getif<std::string>("Method", str_method);
+  if (str_level.length() == 0) {
+    log << Log::ERROR << "Method not specified! Syntax : 'string Method = <method-name>'. Available methods: BDT, RF." << Log::endl();
+    return 0;    
+  }
+  Method::TYPE method = Method::Type(str_method);
+    
   // get input file
   const std::string & inputfilename = config->get<std::string>("InputFileName");
   TFile * f = new TFile(inputfilename.c_str(), "read");
@@ -84,7 +95,7 @@ int main(int argc, char * argv[]) {
   for (int itree = 0; itree < ntree; ++itree) {
 
     // create tree
-    DecisionTree * dtree = new DecisionTree(initial, target, config, histDefs);
+    DecisionTree * dtree = new DecisionTree(initial, target, method, config, histDefs);
     dtree->GrowTree(decisionTrees);
     
     // add tree to forest

@@ -9,6 +9,7 @@
 // local includes
 #include "Log.h"
 #include "HistDefs.h"
+#include "Method.h"
 
 // forward declarations
 class Node;
@@ -22,40 +23,45 @@ class DecisionTree {
 public:
 
   // constructor
-  DecisionTree(TTree * initial, TTree * target, const Store * store, const HistDefs & histDefs);
+  DecisionTree(TTree * initial, TTree * target, Method::TYPE method, const Store * store, const HistDefs & histDefs);
 
   // destructor
   ~DecisionTree();
 
   // grow tree
   void GrowTree(const std::vector<const DecisionTree *> & decisionTrees);
-
-  // fill nodes
-  void FillNodes(std::vector<Node *> buildNodes, const std::vector<const DecisionTree *> * decisionTrees = 0) const;
-
-  // create new node
-  void CreateNode(Branch * input, std::vector<Node *> & nextLayer);
-
-  // add node to decision tree
-  void AddNodeToTree(const Node * node);
     
   // get weight
   float GetWeight() const;
-
-  // helper functions
-  const Node * FirstNode() const; 
-  const std::vector<const Node *> FinalNodes() const;
 
   // write to file
   void Write(std::ofstream & file) const;
 
   
 private:
+  
+  // fill nodes
+  void FillNodes(std::vector<Node *> layer, bool treeSwitch, const std::vector<const DecisionTree *> * decisionTrees = 0) const;
 
-  // TTrees for initial and target samples
+  // create new node
+  void CreateNode(Branch * input, std::vector<Node *> & nextLayer);
+
+  // add node to decision tree
+  void AddNodeToTree(const Node * node);
+
+  // helper functions
+  const Node * FirstNode() const; 
+  const std::vector<const Node *> FinalNodes() const;
+
+  // TTrees for initial and target samples, and event indices for Random Forest
   TTree * m_initial;
   TTree * m_target;
+  std::vector<long> * m_indicesInitial;
+  std::vector<long> * m_indicesTarget;
 
+  // method: BDT/RF
+  Method::TYPE m_method;
+  
   // histogram definitions
   const HistDefs & m_histDefs;
   

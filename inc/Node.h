@@ -9,8 +9,9 @@
 // local includes
 #include "Log.h"
 #include "HistDefs.h"
+#include "Method.h"
 
-// ROOT includes
+// Rootv includes
 #include "TH1F.h"
 
 // forward declarations
@@ -78,10 +79,10 @@ public:
 
     ~Summary()
     {
-      delete m_initial;
-      delete m_target;
-      m_initial = 0;
-      m_target = 0;
+      // delete m_initial;
+      // delete m_target;
+      // m_initial = 0;
+      // m_target = 0;
     }
     
     // get information
@@ -142,7 +143,7 @@ public:
   const Branch * OutputBranch() const;
 
   // initialize histograms
-  void Initialize(const HistDefs & histDefs);  
+  void Initialize(const HistDefs & histDefs, Method::TYPE method);
   
   // fill histograms
   void FillInitial(float weight);
