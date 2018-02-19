@@ -3,6 +3,7 @@
 
 // STL includes
 #include <vector>
+#include <string>
 
 // forward declarations
 class Variable;
@@ -13,6 +14,7 @@ public:
 
   // get variables
   static std::vector<const Variable *> & Get();
+  static const Variable * Get(const std::string & name);  
 
   // initialize
   static void Initialize();

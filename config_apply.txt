@@ -1,13 +1,13 @@
 
 # I/O settings
-string WeightsFileName         = RFweights_CR_1.txt
+string WeightsFileName         = BDTweights_CR_3.txt
 string InputFileName           = test_CR.root
 string InputTreeNameInitial    = data_SemiTagged
 string InputTreeNameTarget     = data_FullyTagged
 
 # additional variables
-string Method                  = RF
-string WeightName              = RFWeight
+string Method                  = BDT
+string WeightName              = BDTWeight
 string EventWeightVariableName = weight
 
 # misc. settings

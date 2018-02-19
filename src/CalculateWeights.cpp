@@ -81,11 +81,11 @@ int main(int argc, char * argv[]) {
   Variables::Initialize();
   
   // get histogram definitions
-  HistDefs histDefs(config);
-  histDefs.Initialize();
-  histDefs.UpdateVariableRanges(target);
-  histDefs.UpdateVariableRanges(initial);
-  for (const HistDefs::Entry & entry : histDefs.GetEntries()) {
+  HistDefs * histDefs = new HistDefs(config);
+  histDefs->Initialize();
+  histDefs->UpdateVariableRanges(target);
+  histDefs->UpdateVariableRanges(initial);
+  for (const HistDefs::Entry & entry : histDefs->GetEntries()) {
     log << Log::INFO << "Histogram name : " << entry.Name() << ", range = ( " << entry.Xmin() << " , " << entry.Xmax() << " )" << Log::endl();
   }
    

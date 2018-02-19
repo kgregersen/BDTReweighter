@@ -8,12 +8,12 @@
 
 // local includes
 #include "Log.h"
-#include "HistDefs.h"
 #include "Method.h"
+#include "Branch.h"
 
 // forward declarations
 class Node;
-class Branch;
+class HistDefs;
 class Store;
 class TTree;
 
@@ -22,8 +22,11 @@ class DecisionTree {
 
 public:
 
-  // constructor
-  DecisionTree(TTree * initial, TTree * target, Method::TYPE method, const Store * store, const HistDefs & histDefs);
+  // constructor (calculate weights)
+  DecisionTree(TTree * initial, TTree * target, Method::TYPE method, const Store * store, const HistDefs * histDefs);
+
+  // constructor (apply weights)
+  DecisionTree(const std::vector<std::pair<float, std::vector<const Branch::Cut *> > > tree, const Store * store);
 
   // destructor
   ~DecisionTree();
@@ -63,7 +66,7 @@ private:
   Method::TYPE m_method;
   
   // histogram definitions
-  const HistDefs & m_histDefs;
+  const HistDefs * m_histDefs;
   
   // nodes
   std::vector<const Node *> m_nodes;

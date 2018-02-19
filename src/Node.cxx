@@ -41,7 +41,8 @@ Node::Node(const Store * store, Branch * input) :
 
     // set to FINAL if there are fewer than twice the min number of events on the node since then it can't be split
     // (there still exist other cases where it can't be split, but we have to fill the histograms to identify these...)
-    static int minEvents = m_store->get<int>("MinEventsNode");
+    int minEvents = 0;
+    m_store->getif<int>("MinEventsNode", minEvents);
     if ( m_sumTarget < 2.*minEvents || m_sumInitial < 2.*minEvents) {
       m_status = FINAL;
     }
@@ -70,7 +71,7 @@ Node::~Node()
 }
 
 
-void Node::Initialize(const HistDefs & histDefs, Method::TYPE method)
+void Node::Initialize(const HistDefs * histDefs, Method::TYPE method)
 {
 
   // check if this node was already initialized
@@ -80,7 +81,7 @@ void Node::Initialize(const HistDefs & histDefs, Method::TYPE method)
   }
   
   // get variables used for splitting the tree
-  const std::vector<HistDefs::Entry> & histDefEntries = histDefs.GetEntries();
+  const std::vector<HistDefs::Entry> & histDefEntries = histDefs->GetEntries();
   std::vector<unsigned int> indices;
   if (method == Method::RF) {
 
@@ -153,6 +154,24 @@ const Branch * Node::OutputBranch() const
   
   return nullptr;
 
+}
+
+
+const Branch * Node::OutputBranch(bool isGreater) const
+{
+
+  if (isGreater) return m_output2;
+  return m_output1;
+  
+}
+
+
+void Node::SetOutputBranch(const Branch * branch, bool isGreater)
+{
+  
+  if (isGreater) m_output2 = branch;
+  else m_output1 = branch;
+  
 }
 
 

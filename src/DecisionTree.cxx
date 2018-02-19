@@ -4,6 +4,7 @@
 #include "Node.h"
 #include "Store.h"
 #include "Event.h"
+#include "HistDefs.h"
 
 // stl includes
 #include <vector>
@@ -15,7 +16,7 @@
 
 
 
-DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method, const Store * store, const HistDefs & histDefs) :
+DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method, const Store * store, const HistDefs * histDefs) :
   m_initial(initial),
   m_target(target),
   m_indicesInitial(0),
@@ -69,6 +70,96 @@ DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method,
   std::sort(m_indicesInitial->begin(), m_indicesInitial->end());
   std::sort(m_indicesTarget->begin(), m_indicesTarget->end());
   m_log << Log::INFO << "DecisionTree() : Sorted vector of indices created!" << Log::endl();
+  
+}
+
+
+DecisionTree::DecisionTree(const std::vector<std::pair<float, std::vector<const Branch::Cut *> > > tree, const Store * store) :
+  m_initial(0),
+  m_target(0),
+  m_indicesInitial(0),
+  m_indicesTarget(0),
+  m_method(Method::NONE),
+  m_histDefs(0),
+  m_log("DecisionTree"),
+  m_store(store)
+{
+
+  std::string str_level;
+  m_store->getif<std::string>("PrintLevel", str_level);
+  if (str_level.length() > 0) {
+    Log::LEVEL level = Log::StringToLEVEL(str_level);
+    m_log.SetLevel(level);
+  }
+  
+  // declare first node
+  Node * firstNode = new Node(m_store, 0); 
+  firstNode->SetStatus(Node::FIRST);   
+  AddNodeToTree(firstNode);
+  
+  // loop over entries (weight, cuts) and add nodes and branches
+  for (unsigned int inode = 0; inode < tree.size(); ++inode) {
+
+    // get final node weight
+    float weight = tree.at(inode).first;
+
+    // get cuts leading to the final node
+    const std::vector<const Branch::Cut *> & cuts = tree.at(inode).second;
+
+    // now add nodes and branches as needed to reconstruct this part of the decision tree
+    Node * node = firstNode;
+    for (const Branch::Cut * cut : cuts) {
+
+      // try to fetch output branch corresponding to the current cut
+      bool isGreater = dynamic_cast<const Branch::Greater *>(cut);
+      Branch * branch = const_cast<Branch *>(node->OutputBranch(isGreater));
+      
+      // if branch doesn't exist, then create it (and its output node), otherwise fetch its output node
+      if ( ! branch ) {
+	Branch * b = new Branch(m_store, node, cut->GetVariable()->Name(), cut->CutValue(), isGreater, 0, 0);
+	node->SetOutputBranch(b, isGreater);
+	node = new Node(m_store, b);
+	node->SetStatus(Node::INTERMEDIATE);
+	AddNodeToTree(node);
+      }
+      else {
+	node = const_cast<Node *>(branch->OutputNode());
+      }
+
+    }
+
+    // set weight and status of final node
+    node->SetAndLockWeight(weight);
+    node->SetStatus(Node::FINAL);
+    
+  }
+
+  // print tree to screen
+  const std::vector<const Node *> finalNodes = FinalNodes();
+  m_log << Log::VERBOSE << "DecisionTree() : ----------------> VERBOSE <----------------" << Log::endl();
+  m_log << Log::VERBOSE << "DecisionTree() : Final nodes : " << finalNodes.size() << " (out of " << m_nodes.size() << ")" << Log::endl();
+  for (unsigned int i = 0; i < finalNodes.size(); ++i) {   
+    m_log << Log::VERBOSE << "DecisionTree() : ---> Weight = " << std::setw(10) << std::left << finalNodes.at(i)->GetWeight() << " Cuts = ";
+    const Branch * b = finalNodes.at(i)->InputBranch();
+    while ( b ) {     
+      // get cut object
+      const Branch::Cut * cut = b->CutObject();
+      const Branch::Smaller * lt = dynamic_cast<const Branch::Smaller *>(cut);
+      const Branch::Greater * gt = dynamic_cast<const Branch::Greater *>(cut);    
+      // check if valid
+      if ( (lt && gt) || (!lt && !gt) ) {
+  	m_log << Log::endl();
+  	m_log << Log::ERROR << "DecisionTree() : Couldn't determine if cut is greater or smaller!" << Log::endl();
+  	throw(0);
+      }
+      // print cut
+      m_log << cut->GetVariable()->Name() << (lt ? "<" : ">") << cut->CutValue() << "|";
+      // update branch
+      b = b->InputNode()->InputBranch();
+    }
+    m_log << Log::endl();
+  }
+  m_log << Log::VERBOSE << "DecisionTree() : ----------------------------------------" << Log::endl();
 
   
 }

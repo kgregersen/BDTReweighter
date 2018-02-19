@@ -3,9 +3,6 @@
 #include "Variable.h"
 #include "Event.h"
 
-// STL includes
-#include <string>
-
 
 // preprocessor macro to add variables
 #define VARIABLE(name,type)						\
@@ -28,6 +25,29 @@ std::vector<const Variable *> & Variables::Get()
   return variables;
 
 }
+
+
+const Variable * Variables::Get(const std::string & name)
+{
+
+  // get set of variables
+  const std::vector<const Variable *> & variables = Variables::Get();
+  if ( variables.size() == 0 ) return 0;
+  
+  // find variable
+  const Variable * variable = 0;
+  for (const Variable * var : variables) {
+    if ( var->Name() == name ) {
+      variable = var;
+    }
+  }
+
+  // return variable
+  return variable;
+  
+}
+
+
 
 void Variables::Initialize()
 {

@@ -28,27 +28,9 @@ Branch::Branch(const Store * store, Node * input, const std::string & variableNa
     m_log.SetLevel(level);
   }
 
-  // get set of variable
-  const std::vector<const Variable *> & variables = Variables::Get();
-  if ( variables.size() == 0 ) {
-    m_log << Log::ERROR << "Branch() : No variables!" << Log::endl();
-    throw(0);
-  }
+  // get variable
+  const Variable * variable = Variables::Get(variableName);
   
-  // find variable
-  const Variable * variable = 0;
-  for (const Variable * var : variables) {
-    if ( var->Name() == variableName ) {
-      variable = var;
-    }
-  }
-
-  // check if variable was found
-  if ( ! variable ) {
-    m_log << Log::ERROR << "Branch() : Variable not found :" << variableName << Log::endl();
-    throw(0);
-  }
-
   // initialize cut object
   if ( isGreater ) m_cut = new Greater(variable, cutValue);
   else             m_cut = new Smaller(variable, cutValue);

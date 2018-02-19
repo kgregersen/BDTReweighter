@@ -142,8 +142,14 @@ public:
   // get output branch
   const Branch * OutputBranch() const;
 
+  // check if output branch exist
+  const Branch * OutputBranch(bool isGreater) const;
+
+  // set output branch (for reconstructing decision tree)
+  void SetOutputBranch(const Branch * branch, bool isGreater);
+  
   // initialize histograms
-  void Initialize(const HistDefs & histDefs, Method::TYPE method);
+  void Initialize(const HistDefs * histDefs, Method::TYPE method);
   
   // fill histograms
   void FillInitial(float weight);
