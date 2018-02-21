@@ -19,11 +19,12 @@
 
 
 
-Node::Node(const Store * store, Branch * input) :
+Node::Node(const Store * store, Method::TYPE method, Branch * input) :
   m_status(NEW),
   m_input(input),
   m_output1(0),
   m_output2(0),
+  m_method(method),
   m_weight(0.),
   m_weightIsSet(false),
   m_sumInitial(-1),
@@ -63,15 +64,23 @@ Node::Node(const Store * store, Branch * input) :
 Node::~Node()
 {
 
-  m_log << Log::DEBUG << "~Node() : Called" << Log::endl();
-  
   delete m_input;
   m_input = 0;
-  
+
+  for (unsigned int i = 0; i < m_histSetInitial.size(); ++i) {
+    delete m_histSetInitial.at(i);
+    m_histSetInitial.at(i) = 0;
+  }
+
+  for (unsigned int i = 0; i < m_histSetTarget.size(); ++i) {
+    delete m_histSetTarget.at(i);
+    m_histSetTarget.at(i) = 0;
+  }
+
 }
 
 
-void Node::Initialize(const HistDefs * histDefs, Method::TYPE method)
+void Node::Initialize(const HistDefs * histDefs)
 {
 
   // check if this node was already initialized
@@ -83,30 +92,26 @@ void Node::Initialize(const HistDefs * histDefs, Method::TYPE method)
   // get variables used for splitting the tree
   const std::vector<HistDefs::Entry> & histDefEntries = histDefs->GetEntries();
   std::vector<unsigned int> indices;
-  if (method == Method::RF) {
-
-    // Random Forest uses "feature sampling", only using random subset of the variables to grow the decision tree
+  if (m_method == Method::RF || m_method == Method::ET) {
+    
+    // Random Forest and ExtraTrees use "feature sampling", only using random subset of the variables to grow the decision tree
     static int samplingFractionSeed = m_store->get<float>("SamplingFractionSeed");
     static float featSamplingFraction = m_store->get<float>("FeatureSamplingFraction");
-    unsigned int nFeat = static_cast<unsigned int>(featSamplingFraction*histDefEntries.size());
-    while (indices.size() < nFeat) {
-      static TRandom3 ran( samplingFractionSeed );
-      unsigned int index = static_cast<unsigned int>(ran.Rndm()*histDefEntries.size());
-      if ( std::find(indices.begin(), indices.end(), index) == indices.end() ) {
-	indices.push_back( index );
-      }
-    }
+    static TRandom3 ran( samplingFractionSeed );
+    for (unsigned int index = 0; index < histDefEntries.size(); ++index) indices.push_back( index );
+    for (unsigned int index = 0; index < histDefEntries.size(); ++index) std::swap(indices[ index ], indices[static_cast<int>(ran.Rndm()*(static_cast<float>(indices.size()) - std::numeric_limits<float>::epsilon()))] );
+    indices.resize(featSamplingFraction*histDefEntries.size());
     
   }
   else {
-
+    
     // use all variables
     for (unsigned int index = 0; index < histDefEntries.size(); ++index) {
       indices.push_back( index );
     }
-
+    
   }
-
+  
   // declare target and initial histograms for each variable
   for (unsigned int index : indices) {
     const HistDefs::Entry & histDef = histDefEntries.at(index);
@@ -116,7 +121,7 @@ void Node::Initialize(const HistDefs * histDefs, Method::TYPE method)
   
   
 }
-  
+
 
 Node::STATUS Node::Status() const
 {
@@ -185,30 +190,36 @@ void Node::Build(Branch *& b1, Branch *& b2)
     throw(0);
   }
   
-  // calculate cut-values and chisquares
+  // summary for chosen node
+  Summary * nodeSummary = 0;
+
+  // vector to hold node summaries
   std::vector<Summary *> nodeSummaryVec;
+  
+  // determine variable to cut on and the cut value
   static int minEvents = m_store->get<int>("MinEventsNode");
-  for (int i = 0; i < nhist; ++i) {
+  if (m_method == Method::ET) {
 
-    Hist * histTarg = m_histSetTarget.at(i);
-    Hist * histInit = m_histSetInitial.at(i);
-
+    // radnomly chose variable
+    static int samplingFractionSeed = m_store->get<float>("SamplingFractionSeed");
+    static TRandom3 ran( samplingFractionSeed );
+    unsigned int ranIndex = static_cast<unsigned int>(ran.Rndm()*(static_cast<float>(nhist) - std::numeric_limits<float>::epsilon()));
+    
+    Hist * histTarg = m_histSetTarget.at( ranIndex );
+    Hist * histInit = m_histSetInitial.at( ranIndex );
+    
     const TH1F * rootHistTarg = histTarg->ROOTHist();
     const TH1F * rootHistInit = histInit->ROOTHist();
 
-    m_log << Log::DEBUG << "targ integral = " << rootHistTarg->Integral(0,-1) << "  init integral = " << rootHistInit->Integral(0,-1) << Log::endl();
-    
-    float maxChisquare = 0;
-    float cutValue = std::numeric_limits<float>::max();
-    float sumTargetLow   = 0;
-    float sumTargetHigh  = 0;
-    float sumInitialLow  = 0;
-    float sumInitialHigh = 0;
-    
-    // loop over bins in histogram
-    for (int xbin = 1; xbin < rootHistTarg->GetNbinsX(); ++xbin) {
+    bool keepTrying = true;
+    while ( keepTrying ) {
 
+      keepTrying = false;
+      
+      if ( ! m_input && ! nodeSummary ) keepTrying = true;
+      
       // get integrals above and below
+      unsigned int xbin = static_cast<unsigned int>(ran.Rndm()*(static_cast<float>(rootHistInit->GetNbinsX()) - std::numeric_limits<float>::epsilon()));
       Double_t sumInitLowErr  = 0;
       Double_t sumTargLowErr  = 0;
       Double_t sumInitHighErr = 0;
@@ -217,45 +228,98 @@ void Node::Build(Branch *& b1, Branch *& b2)
       Double_t sumTargLow  = rootHistTarg->IntegralAndError(0       , xbin, sumTargLowErr );
       Double_t sumInitHigh = rootHistInit->IntegralAndError(xbin + 1, -1  , sumInitHighErr);
       Double_t sumTargHigh = rootHistTarg->IntegralAndError(xbin + 1, -1  , sumTargHighErr);
-            
-      m_log << Log::DEBUG << "sumInitLow = " << sumInitLow << "  sumTargLow = " << sumTargLow << "  sumInitHigh = " << sumInitHigh << "  sumTargHigh = " << sumTargHigh << Log::endl();
+      
+      m_log << Log::DEBUG << "xbin = " << xbin << "  sumInitLow = " << sumInitLow << "  sumTargLow = " << sumTargLow << "  sumInitHigh = " << sumInitHigh << "  sumTargHigh = " << sumTargHigh << Log::endl();
       
       // check min events on potential sub-nodes
-      if (sumInitLow < minEvents || sumInitHigh < minEvents || sumTargLow < minEvents || sumTargHigh < minEvents ) continue;
+      if (sumInitLow >= minEvents && sumInitHigh >= minEvents && sumTargLow >= minEvents && sumTargHigh >= minEvents ) {
+	
+	// calculate chisquare and get cut value
+	float chisquare = pow(sumInitLow - sumTargLow, 2)/(pow(sumInitLowErr, 2) + pow(sumTargLowErr, 2)) + pow(sumInitHigh - sumTargHigh, 2)/(pow(sumInitHighErr, 2) + pow(sumTargHighErr, 2));
+	float cutValue  = rootHistTarg->GetBinLowEdge(xbin + 1);
+	
+	// set node summary
+	nodeSummary = new Summary(histInit, histTarg, cutValue, chisquare, sumInitLow, sumTargLow, sumInitHigh, sumTargHigh);
+	
+	m_log << Log::DEBUG << "Node::Summary set! xbin = " << xbin << "  sumInitLow = " << sumInitLow << "  sumTargLow = " << sumTargLow << "  sumInitHigh = " << sumInitHigh << "  sumTargHigh = " << sumTargHigh << Log::endl();
 
-      // calculate chisquare and update best candidate
-      float chisquare = pow(sumInitLow - sumTargLow, 2)/(pow(sumInitLowErr, 2) + pow(sumTargLowErr, 2)) + pow(sumInitHigh - sumTargHigh, 2)/(pow(sumInitHighErr, 2) + pow(sumTargHighErr, 2));
-      if (chisquare > maxChisquare) {
-	maxChisquare   = chisquare;
-	cutValue       = rootHistTarg->GetBinLowEdge(xbin + 1);
-	sumInitialLow  = sumInitLow;
-	sumInitialHigh = sumInitHigh;
-	sumTargetLow   = sumTargLow;
-	sumTargetHigh  = sumTargHigh;
       }
 
     }
     
-    m_log << Log::DEBUG << "sumInitialLow = " << sumInitialLow << "  sumTargetLow = " << sumTargetLow << "  sumInitialHigh = " << sumInitialHigh << "  sumTargetHigh = " << sumTargetHigh << Log::endl();
-    
-    // store info for this variable
-    if (maxChisquare > 0) {
-      nodeSummaryVec.push_back( new Summary(histInit, histTarg, cutValue, maxChisquare, sumInitialLow, sumTargetLow, sumInitialHigh, sumTargetHigh) );
-    }
-    
   }
-
-  // find highest chisquare
-  Summary * nodeSummary = nodeSummaryVec.size() > 0 ? nodeSummaryVec[0] : 0;
-  for (Summary * s : nodeSummaryVec) {
-    if (s->Chisquare() > nodeSummary->Chisquare()) {
-      nodeSummary = s;
+  else {
+    
+    // calculate cut-values and chisquares
+    for (int i = 0; i < nhist; ++i) {
+      
+      Hist * histTarg = m_histSetTarget.at(i);
+      Hist * histInit = m_histSetInitial.at(i);
+      
+      const TH1F * rootHistTarg = histTarg->ROOTHist();
+      const TH1F * rootHistInit = histInit->ROOTHist();
+      
+      m_log << Log::DEBUG << "targ integral = " << rootHistTarg->Integral(0,-1) << "  init integral = " << rootHistInit->Integral(0,-1) << Log::endl();
+      
+      float maxChisquare = 0;
+      float cutValue = std::numeric_limits<float>::max();
+      float sumTargetLow   = 0;
+      float sumTargetHigh  = 0;
+      float sumInitialLow  = 0;
+      float sumInitialHigh = 0;
+      
+      // loop over bins in histogram
+      for (int xbin = 1; xbin < rootHistTarg->GetNbinsX(); ++xbin) {
+	
+	// get integrals above and below
+	Double_t sumInitLowErr  = 0;
+	Double_t sumTargLowErr  = 0;
+	Double_t sumInitHighErr = 0;
+	Double_t sumTargHighErr = 0;
+	Double_t sumInitLow  = rootHistInit->IntegralAndError(0       , xbin, sumInitLowErr );
+	Double_t sumTargLow  = rootHistTarg->IntegralAndError(0       , xbin, sumTargLowErr );
+	Double_t sumInitHigh = rootHistInit->IntegralAndError(xbin + 1, -1  , sumInitHighErr);
+	Double_t sumTargHigh = rootHistTarg->IntegralAndError(xbin + 1, -1  , sumTargHighErr);
+	
+	m_log << Log::DEBUG << "sumInitLow = " << sumInitLow << "  sumTargLow = " << sumTargLow << "  sumInitHigh = " << sumInitHigh << "  sumTargHigh = " << sumTargHigh << Log::endl();
+	
+	// check min events on potential sub-nodes
+	if (sumInitLow < minEvents || sumInitHigh < minEvents || sumTargLow < minEvents || sumTargHigh < minEvents ) continue;
+	
+	// calculate chisquare and update best candidate
+	float chisquare = pow(sumInitLow - sumTargLow, 2)/(pow(sumInitLowErr, 2) + pow(sumTargLowErr, 2)) + pow(sumInitHigh - sumTargHigh, 2)/(pow(sumInitHighErr, 2) + pow(sumTargHighErr, 2));
+	if (chisquare > maxChisquare) {
+	  maxChisquare   = chisquare;
+	  cutValue       = rootHistTarg->GetBinLowEdge(xbin + 1);
+	  sumInitialLow  = sumInitLow;
+	  sumInitialHigh = sumInitHigh;
+	  sumTargetLow   = sumTargLow;
+	  sumTargetHigh  = sumTargHigh;
+	}
+	
+      }
+      
+      m_log << Log::DEBUG << "sumInitialLow = " << sumInitialLow << "  sumTargetLow = " << sumTargetLow << "  sumInitialHigh = " << sumInitialHigh << "  sumTargetHigh = " << sumTargetHigh << Log::endl();
+      
+      // store info for this variable
+      if (maxChisquare > 0) {
+	nodeSummaryVec.push_back( new Summary(histInit, histTarg, cutValue, maxChisquare, sumInitialLow, sumTargetLow, sumInitialHigh, sumTargetHigh) );
+      }
+      
     }
-  }
 
+    // find highest chisquare
+    for (Summary * s : nodeSummaryVec) {
+      if (s->Chisquare() > nodeSummary->Chisquare()) {
+	nodeSummary = s;
+      }
+    }
+
+  }
+  
   // sanity check
   if ( m_input == 0 && nodeSummary == 0 ) {
-    m_log << Log::ERROR << "Build() : This is the first node in the tree (input branch is null), but there is no node summary...?" << Log::endl();
+    m_log << Log::ERROR << "Build() : This is the first node in the tree (input branch is null), but there is no node summary - we can't build the friggin tree?!?!" << Log::endl();
     throw(0);
   }
   

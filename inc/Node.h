@@ -122,7 +122,7 @@ public:
 
   
   // constructors
-  Node(const Store * store, Branch * input = 0);
+  Node(const Store * store, Method::TYPE method, Branch * input = 0);
 
   // destructor
   ~Node();
@@ -149,7 +149,7 @@ public:
   void SetOutputBranch(const Branch * branch, bool isGreater);
   
   // initialize histograms
-  void Initialize(const HistDefs * histDefs, Method::TYPE method);
+  void Initialize(const HistDefs * histDefs);
   
   // fill histograms
   void FillInitial(float weight);
@@ -181,6 +181,9 @@ private:
   const Branch * m_output1;
   const Branch * m_output2;
 
+  // method
+  const Method::TYPE m_method;
+  
   // weight
   mutable float m_weight;
   mutable bool m_weightIsSet;

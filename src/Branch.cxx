@@ -41,13 +41,9 @@ Branch::Branch(const Store * store, Node * input, const std::string & variableNa
 Branch::~Branch()
 {
 
-  m_log << Log::INFO << "~Branch() : Called" << Log::endl();
+  //m_log << Log::INFO << "~Branch() : Called" << Log::endl();
 
-  delete m_input;
-  delete m_output;
   delete m_cut;
-  m_input = 0;
-  m_output = 0;
   m_cut = 0;
   
 }

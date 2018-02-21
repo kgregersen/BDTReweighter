@@ -1,14 +1,15 @@
 
 # I/O settings
-string WeightsFileName         = BDTweights_CR_3.txt
+string WeightsFileName         = batch/RF_7/batchSubmit-21-02-18_08-43-10_RFweights_CR.txt
 string InputFileName           = test_CR.root
 string InputTreeNameInitial    = data_SemiTagged
 string InputTreeNameTarget     = data_FullyTagged
 
 # additional variables
-string Method                  = BDT
-string WeightName              = BDTWeight
+string Method                  = RF
+string WeightName              = RFWeight_RF_7_1
 string EventWeightVariableName = weight
+int    MaxTrees                = -1
 
 # misc. settings
 string PrintLevel              = INFO

@@ -43,11 +43,20 @@ int main(int argc, char * argv[]) {
   std::string str_method;
   config->getif<std::string>("Method", str_method);
   if (str_level.length() == 0) {
-    log << Log::ERROR << "Method not specified! Syntax : 'string Method = <method-name>'. Available methods: BDT, RF." << Log::endl();
+    log << Log::ERROR << "Method not specified! Syntax : 'string Method = <method-name>'. Available methods: BDT, RF, ET (see ./inc/Methods.h)." << Log::endl();
     return 0;    
   }
   Method::TYPE method = Method::Type(str_method);
     
+  // check learning rate if RF/ET
+  if (method == Method::RF || method == Method::ET) {
+    float learningRate = config->get<float>("LearningRate");
+    if (learningRate < 0.99999) {
+      log << Log::ERROR << "For Random Forest and ExtraTrees, the learning rate ('float LearningRate') needs to be 1, but in the config file it is " << learningRate << Log::endl();
+      return 0;
+    }
+  }
+  
   // get input file
   const std::string & inputfilename = config->get<std::string>("InputFileName");
   TFile * f = new TFile(inputfilename.c_str(), "read");

@@ -41,7 +41,7 @@ int main(int argc, char * argv[]) {
   std::string str_method;
   config->getif<std::string>("Method", str_method);
   if (str_level.length() == 0) {
-    log << Log::ERROR << "Method not specified! Syntax : 'string Method = <method-name>'. Available methods: BDT, RF." << Log::endl();
+    log << Log::ERROR << "Method not specified! Syntax : 'string Method = <method-name>'. Available methods: BDT, RF, ET (see ./inc/Methods.h)." << Log::endl();
     return 0;    
   }
   Method::TYPE method = Method::Type(str_method);
@@ -78,6 +78,12 @@ int main(int argc, char * argv[]) {
     if (line.size() >= 14 && line.substr(2,13) == "Decision Tree") {
       if (treeReadIn.size()) {
 	trees.push_back( new DecisionTree(treeReadIn, config) );
+      }
+      for (unsigned int i = 0; i < treeReadIn.size(); ++i) {
+	std::vector<const Branch::Cut *> cuts = treeReadIn.at(i).second;
+	for (unsigned int j = 0; j < cuts.size(); ++j) {
+	  delete cuts.at(j);
+	}
       }
       treeReadIn.clear();
       continue;
@@ -139,6 +145,16 @@ int main(int argc, char * argv[]) {
   // remember to add last tree
   trees.push_back( new DecisionTree(treeReadIn, config) );
 
+  // remove trees if requested
+  int maxTrees = trees.size();
+  config->getif<int>("MaxTrees", maxTrees);
+  if (maxTrees > 0 && maxTrees < static_cast<int>(trees.size())) {
+    for (unsigned int itree = 0; itree < trees.size(); ++itree) {
+      if (static_cast<int>(itree) > maxTrees) delete trees.at(itree);
+    }
+    trees.resize(maxTrees);
+  }
+    
   log << Log::INFO << "Weights succesfully read from file!" << Log::endl();
 
   // open input file in 'update' mode
@@ -169,8 +185,8 @@ int main(int argc, char * argv[]) {
 
   // prepare for loop over tree entries
   long maxEvent = initial->GetEntries();
-  long reportFrac = maxEvent/(maxEvent > 100000 ? 10 : 1) + 1;
-  log << Log::INFO << "FillHistograms() : Looping over events (" << initial->GetName() << ") : "  << maxEvent << Log::endl();
+  long reportFrac = maxEvent/(maxEvent > 100000 ? 100 : 1) + 1;
+  log << Log::INFO << "Looping over events (" << initial->GetName() << ") : "  << maxEvent << Log::endl();
   std::clock_t start = std::clock();
 
   // Loop over ree entries
@@ -181,7 +197,7 @@ int main(int argc, char * argv[]) {
       double duration     = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
       double frequency    = static_cast<double>(ievent) / duration;
       double timeEstimate = static_cast<double>(maxEvent - ievent) / frequency;
-      log << Log::INFO << "FillHistograms() : ---> processed : " << std::setw(8) << 100*ievent/maxEvent << "\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time : " << std::setw(4) << static_cast<int>(timeEstimate) << " sec"<< Log::endl(); 
+      log << Log::INFO << "---> processed : " << std::setw(8) << 100*ievent/maxEvent << "\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time : " << std::setw(4) << static_cast<int>(timeEstimate) << " sec"<< Log::endl(); 
     }
     
     // get event
@@ -190,6 +206,7 @@ int main(int argc, char * argv[]) {
     // initialise weight
     if      (method == Method::BDT) weight = 1.;
     else if (method == Method::RF ) weight = 0.;
+    else if (method == Method::ET ) weight = 0.;
 
     // loop over trees
     for (const DecisionTree * t : trees) {
@@ -199,11 +216,12 @@ int main(int argc, char * argv[]) {
       // use weight if event falls on this node, and break out of this tree
       if      (method == Method::BDT) weight *= w;
       else if (method == Method::RF ) weight += w;
+      else if (method == Method::ET ) weight += w;
 
     }
 
     // finalise weight
-    if (method == Method::RF) {
+    if (method == Method::RF || method == Method::ET) {
       weight /= static_cast<float>( trees.size() );
     }
     
@@ -215,7 +233,7 @@ int main(int argc, char * argv[]) {
   // print out
   double duration  = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
   double frequency = static_cast<double>(maxEvent) / duration;
-  log << Log::INFO << "FillHistograms() : ---> processed :  100\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time :    0 sec"<< Log::endl(); 
+  log << Log::INFO << "---> processed :  100\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time :    0 sec"<< Log::endl(); 
 
   // write tree
   initial->Write();  

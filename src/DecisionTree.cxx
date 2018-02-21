@@ -9,6 +9,7 @@
 // stl includes
 #include <vector>
 #include <algorithm>
+#include <limits>
 
 // ROOT includes
 #include "TTree.h"
@@ -46,17 +47,17 @@ DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method,
     // get unique vector of indices to subset of events
     // ---> initial
     for (long ievent = 0; ievent < maxEventInit; ++ievent) indices.push_back(ievent);
-    for (long ievent = 0; ievent < maxEventInit; ++ievent) std::swap(indices[ievent], indices[static_cast<int>(ran.Rndm()*(indices.size() - 1))] );
+    for (long ievent = 0; ievent < maxEventInit; ++ievent) std::swap(indices[ievent], indices[static_cast<int>(ran.Rndm()*(static_cast<float>(indices.size()) - std::numeric_limits<float>::epsilon()))] );
     m_indicesInitial = new std::vector<long>(indices.begin(), indices.begin() + samplingFraction*maxEventInit);
     // ---> target
     indices.clear();
     indices.reserve(maxEventTarg);
     for (long ievent = 0; ievent < maxEventTarg; ++ievent) indices.push_back(ievent);
-    for (long ievent = 0; ievent < maxEventTarg; ++ievent) std::swap(indices[ievent], indices[static_cast<int>(ran.Rndm()*(indices.size() - 1))] );
+    for (long ievent = 0; ievent < maxEventTarg; ++ievent) std::swap(indices[ievent], indices[static_cast<int>(ran.Rndm()*(static_cast<float>(indices.size()) - std::numeric_limits<float>::epsilon()))] );
     m_indicesTarget = new std::vector<long>(indices.begin(), indices.begin() + samplingFraction*maxEventTarg);
   }
-  if (m_method == Method::RF) {
-    // get non-unique vector of indices to subset of events
+  else { 
+    // get non-unique vector of indices to subset of events (Random Forest, Extremely Randomised Trees)
     // ---> initial
     m_indicesInitial = new std::vector<long>();
     m_indicesInitial->reserve(samplingFraction*maxEventInit);
@@ -93,7 +94,7 @@ DecisionTree::DecisionTree(const std::vector<std::pair<float, std::vector<const 
   }
   
   // declare first node
-  Node * firstNode = new Node(m_store, 0); 
+  Node * firstNode = new Node(m_store, m_method, 0); 
   firstNode->SetStatus(Node::FIRST);   
   AddNodeToTree(firstNode);
   
@@ -118,7 +119,7 @@ DecisionTree::DecisionTree(const std::vector<std::pair<float, std::vector<const 
       if ( ! branch ) {
 	Branch * b = new Branch(m_store, node, cut->GetVariable()->Name(), cut->CutValue(), isGreater, 0, 0);
 	node->SetOutputBranch(b, isGreater);
-	node = new Node(m_store, b);
+	node = new Node(m_store, m_method, b);
 	node->SetStatus(Node::INTERMEDIATE);
 	AddNodeToTree(node);
       }
@@ -168,6 +169,11 @@ DecisionTree::DecisionTree(const std::vector<std::pair<float, std::vector<const 
 DecisionTree::~DecisionTree()
 {
 
+  for (unsigned int i = 0; i < m_nodes.size(); ++i) {
+    delete m_nodes.at(i);
+    m_nodes.at(i) = 0;
+  }
+  
 }
 
 
@@ -182,7 +188,7 @@ void DecisionTree::GrowTree(const std::vector<const DecisionTree *> & decisionTr
   std::clock_t start = std::clock();
 
   // declare first node
-  Node * node = new Node(m_store, 0);
+  Node * node = new Node(m_store, m_method, 0);
 
   // declare vector to hold nodes to be build
   std::vector<Node *> layer;
@@ -212,7 +218,7 @@ void DecisionTree::GrowTree(const std::vector<const DecisionTree *> & decisionTr
 
     // initialise histograms on nodes
     for (Node * node : layer) {
-      node->Initialize(m_histDefs, m_method);
+      node->Initialize(m_histDefs);
     }
       
     // fill nodes (first target, then initial)
@@ -315,7 +321,7 @@ void DecisionTree::CreateNode(Branch * input, std::vector<Node *> & nextLayer)
 {
 
   // declare node
-  Node * node = new Node(m_store, input);
+  Node * node = new Node(m_store, m_method, input);
 
   // check if it's a FINAL node or if we can grow it further
   if (node->Status() == Node::FINAL) {
