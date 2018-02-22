@@ -309,12 +309,14 @@ void Node::Build(Branch *& b1, Branch *& b2)
     }
 
     // find highest chisquare
-    for (Summary * s : nodeSummaryVec) {
-      if (s->Chisquare() > nodeSummary->Chisquare()) {
-	nodeSummary = s;
+    if (nodeSummaryVec.size()) {
+      nodeSummary = nodeSummaryVec.at(0);
+      for (Summary * s : nodeSummaryVec) {
+	if (s->Chisquare() > nodeSummary->Chisquare()) {
+	  nodeSummary = s;
+	}
       }
     }
-
   }
   
   // sanity check
