@@ -233,7 +233,7 @@ int main(int argc, char * argv[]) {
   // print out
   double duration  = (std::clock() - start)/static_cast<double>(CLOCKS_PER_SEC);    
   double frequency = static_cast<double>(maxEvent) / duration;
-  log << Log::INFO << "---> processed :  100\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time :    0 sec"<< Log::endl(); 
+  log << Log::INFO << "---> processed : " << std::setw(8) << 100 << "\%  ---  frequency : " << std::setw(7) << static_cast<int>(frequency) << " events/sec  ---  time : " << std::setw(4) << static_cast<int>(duration) << " sec  ---  remaining time :    0 sec"<< Log::endl(); 
 
   // write tree
   initial->Write();  

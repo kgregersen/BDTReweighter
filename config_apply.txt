@@ -1,13 +1,12 @@
 
 # I/O settings
-string WeightsFileName         = batch/RF_7/batchSubmit-21-02-18_08-43-10_RFweights_CR.txt
+string WeightsFileName         = RFWeights_CR.txt
 string InputFileName           = test_CR.root
 string InputTreeNameInitial    = data_SemiTagged
-string InputTreeNameTarget     = data_FullyTagged
 
 # additional variables
 string Method                  = RF
-string WeightName              = RFWeight_RF_7_1
+string WeightName              = RFWeight
 string EventWeightVariableName = weight
 int    MaxTrees                = -1
 
