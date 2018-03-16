@@ -9,14 +9,15 @@ string InputTreeNameTarget     = data_FullyTagged
 string EventWeightVariableName = weight
 
 # hyperparameters
-string Method                  = RF
-int    NumberOfTrees           = 10
+string Method                  = BDT
+bool   Bagging                 = 1
+int    NumberOfTrees           = 5
 int    MaxTreeLayers           = 1000
 int    MinEventsNode           = 5
 float  LearningRate            = 1
 float  SamplingFraction        = 0.7   
 float  SamplingFractionSeed    = 314
-float  FeatureSamplingFraction = 0.5
+float  FeatureSamplingFraction = 0.25
 
 # misc. settings
 string PrintLevel              = INFO

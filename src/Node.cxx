@@ -200,7 +200,7 @@ void Node::Build(Branch *& b1, Branch *& b2)
   static int minEvents = m_store->get<int>("MinEventsNode");
   if (m_method == Method::ET) {
 
-    // radnomly chose variable
+    // randomly chose variable
     static int samplingFractionSeed = m_store->get<float>("SamplingFractionSeed");
     static TRandom3 ran( samplingFractionSeed );
     unsigned int ranIndex = static_cast<unsigned int>(ran.Rndm()*(static_cast<float>(nhist) - std::numeric_limits<float>::epsilon()));
