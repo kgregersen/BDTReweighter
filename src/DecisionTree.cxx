@@ -36,12 +36,17 @@ DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method,
   }
 
   m_log << Log::INFO << "DecisionTree() : Preparing sorted vector of event indices" << Log::endl();
+
   long maxEventInit = m_initial->GetEntries();
   long maxEventTarg = m_target->GetEntries();
   static float samplingFraction   = m_store->get<float>("SamplingFraction");
   static int samplingFractionSeed = m_store->get<float>("SamplingFractionSeed");
   static TRandom3 ran( samplingFractionSeed );
-  if (m_method == Method::BDT) {
+  static bool bagging = false;
+  m_store->getif<bool>("Bagging", bagging);
+  
+  if (m_method == Method::BDT && ! bagging ) {
+
     std::vector<long> indices;
     indices.reserve(maxEventInit);
     // get unique vector of indices to subset of events
@@ -55,8 +60,12 @@ DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method,
     for (long ievent = 0; ievent < maxEventTarg; ++ievent) indices.push_back(ievent);
     for (long ievent = 0; ievent < maxEventTarg; ++ievent) std::swap(indices[ievent], indices[static_cast<int>(ran.Rndm()*(static_cast<float>(indices.size()) - std::numeric_limits<float>::epsilon()))] );
     m_indicesTarget = new std::vector<long>(indices.begin(), indices.begin() + samplingFraction*maxEventTarg);
+
   }
-  else { 
+  else {
+    
+    // use same sample of data for all trees in BDT when bagging
+    if (m_method == Method::BDT && bagging) ran.SetSeed( samplingFractionSeed );  
     // get non-unique vector of indices to subset of events (Random Forest, Extremely Randomised Trees)
     // ---> initial
     m_indicesInitial = new std::vector<long>();
@@ -66,10 +75,13 @@ DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method,
     m_indicesTarget = new std::vector<long>();
     m_indicesTarget->reserve(samplingFraction*maxEventInit);
     while ( m_indicesTarget->size() < samplingFraction*maxEventTarg ) m_indicesTarget->push_back( static_cast<long>(ran.Rndm()*maxEventTarg) );
+
   }
+
   // need to sort to optimise reading of TTree (TTree::GetEntry(index) reads in chunks of sequential data, so we don't want to jump around in indices...)
   std::sort(m_indicesInitial->begin(), m_indicesInitial->end());
   std::sort(m_indicesTarget->begin(), m_indicesTarget->end());
+
   m_log << Log::INFO << "DecisionTree() : Sorted vector of indices created!" << Log::endl();
   
 }
