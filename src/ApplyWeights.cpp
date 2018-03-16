@@ -153,9 +153,9 @@ int main(int argc, char * argv[]) {
       if (static_cast<int>(itree) > maxTrees) delete trees.at(itree);
     }
     trees.resize(maxTrees);
-  }
-    
+  }    
   log << Log::INFO << "Weights succesfully read from file!" << Log::endl();
+  log << Log::INFO << "Number of decision trees : " << trees.size() << Log::endl();
 
   // open input file in 'update' mode
   const std::string & inputfilename = config->get<std::string>("InputFileName");
@@ -177,12 +177,19 @@ int main(int argc, char * argv[]) {
   Event & event = Event::Instance(config);
   event.ConnectAllVariables(initial, false);
 
-  // BDT event weight
+  // BDT/RF/ET event weight
   float weight;
-  std::string weightName = "BDTWeight";
+  std::string weightName = "Weight";
   config->getif<std::string>("WeightName", weightName);
   TBranch * b_weight = initial->Branch(weightName.c_str(), &weight);
 
+  // RF/ET event weight error
+  float weight_err;
+  std::string weightErrName = weightName + "_err";
+  TBranch * b_weight_err = 0;
+  if (method == Method::RF || method == Method::ET) b_weight_err = initial->Branch(weightErrName.c_str(), &weight_err);
+  std::vector<float> weight_err_vec(trees.size());
+  
   // prepare for loop over tree entries
   long maxEvent = initial->GetEntries();
   long reportFrac = maxEvent/(maxEvent > 100000 ? 100 : 1) + 1;
@@ -209,24 +216,39 @@ int main(int argc, char * argv[]) {
     else if (method == Method::ET ) weight = 0.;
 
     // loop over trees
-    for (const DecisionTree * t : trees) {
+    for (unsigned int itree = 0; itree < trees.size(); ++itree) {
+
+      // get decision tree weight
+      float w = trees.at(itree)->GetWeight();
       
-      float w = t->GetWeight();
-      
-      // use weight if event falls on this node, and break out of this tree
-      if      (method == Method::BDT) weight *= w;
-      else if (method == Method::RF ) weight += w;
-      else if (method == Method::ET ) weight += w;
+      // update event weight
+      if (method == Method::BDT) {
+	weight *= w;
+      }
+      else if (method == Method::RF || method == Method::ET) {
+	weight += w;
+	weight_err_vec.at(itree) = w;
+      }
 
     }
 
     // finalise weight
     if (method == Method::RF || method == Method::ET) {
+
       weight /= static_cast<float>( trees.size() );
+
+      for (unsigned int itree = 0; itree < trees.size(); ++itree) {
+	weight_err += pow(weight_err_vec.at(itree) - weight, 2);
+      }
+      weight_err = sqrt( weight_err/(trees.size() - 1) );
+      
     }
     
     // fill weight
     b_weight->Fill();
+    if (b_weight_err) {
+      b_weight_err->Fill();
+    }
     
   }
 
