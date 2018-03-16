@@ -43,7 +43,7 @@ DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method,
   static int samplingFractionSeed = m_store->get<float>("SamplingFractionSeed");
   static TRandom3 ran( samplingFractionSeed );
   static bool bagging = false;
-  m_store->getif<bool>("Bagging", bagging);
+  m_store->getif<bool>("Bagging", bagging); 
   
   if (m_method == Method::BDT && ! bagging ) {
 
@@ -65,7 +65,10 @@ DecisionTree::DecisionTree(TTree * initial, TTree * target, Method::TYPE method,
   else {
     
     // use same sample of data for all trees in BDT when bagging
-    if (m_method == Method::BDT && bagging) ran.SetSeed( samplingFractionSeed );  
+    if (m_method == Method::BDT && bagging) {
+      m_log << Log::INFO << "DecisionTree() : Method = BDT, 'Bagging' activated" << Log::endl();
+      ran.SetSeed( samplingFractionSeed );  
+    }
     // get non-unique vector of indices to subset of events (Random Forest, Extremely Randomised Trees)
     // ---> initial
     m_indicesInitial = new std::vector<long>();
