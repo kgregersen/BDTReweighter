@@ -141,6 +141,7 @@ int main(int argc, char * argv[]) {
   for (const DecisionTree * dtree : decisionTrees) {
     dtree->Write( outfile );
   }
+  outfile << "\n\n# End"; 
 
   // close file
   outfile.close();

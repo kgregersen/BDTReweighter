@@ -21,6 +21,72 @@
 #include "TTree.h"
 
 
+// 
+class Forest {
+
+public:
+  
+  // constructor
+  Forest(const std::vector<const DecisionTree *> trees, Method::TYPE method) : m_trees(trees), m_method(method), m_cached(false), m_weight(0), m_error(0) {}
+
+  // destructor
+  ~Forest() {}
+
+  // get weight
+  void GetWeight(float & weight, float & error) 
+  {   
+    if ( ! m_cached ) CalculateWeight();
+    weight = m_weight;
+    error = m_error;
+  }
+
+
+private:
+
+  // calculate weight
+  void CalculateWeight() {
+
+    if (m_method == Method::BDT) {
+      for (unsigned int i = 0; i < m_trees.size(); ++i) {
+	float w = m_trees.at(i)->GetWeight();
+	m_weight *= w;
+      }
+      m_error = 0.;
+    }
+    else if (m_method == Method::RF || m_method == Method::ET) {
+      static std::vector<float> error_vec;
+      error_vec.resize(m_trees.size());
+      for (unsigned int i = 0; i < m_trees.size(); ++i) {
+	float w = m_trees.at(i)->GetWeight();
+	m_weight += w;
+	error_vec.at(i) = w;
+      }
+      m_weight /= static_cast<float>( m_trees.size() );
+      for (unsigned int i = 0; i < m_trees.size(); ++i) {
+	m_error += pow(error_vec.at(i) - m_weight, 2);
+      }
+      m_error = sqrt( m_error/( m_trees.size() > 1 ? m_trees.size() - 1 : 1 ) );
+    }
+    
+    m_cached = true;
+
+  }
+  
+  // trees
+  const std::vector<const DecisionTree *> m_trees;
+ 
+  // method
+  const Method::TYPE m_method;
+
+  // weight/error
+  bool m_cached;
+  float m_weight;
+  float m_error;
+
+};
+
+
+
 
 int main(int argc, char * argv[]) {
 
@@ -55,12 +121,15 @@ int main(int argc, char * argv[]) {
   log << Log::INFO << "Opening file " << weightsfilename << Log::endl();
   weightsfile.open(weightsfilename.c_str());
  
+  // vector of forests
+  std::vector<Forest *> forests;
+
   // forest of decision trees
   std::vector<const DecisionTree *> trees;
 
   // single tree (collection of final node weights and corresponding cuts)
   std::vector<std::pair<float, std::vector<const Branch::Cut *> > > treeReadIn;
-  
+ 
   // read lines
   log << Log::INFO << "Reading file " << weightsfilename << Log::endl();
   std::string line;
@@ -74,8 +143,16 @@ int main(int argc, char * argv[]) {
     std::getline( weightsfile , line );
     log << Log::DEBUG << line << Log::endl();
 
+    // check if we are at new forest
+    if ( line.size() >= 14 && line.substr(2,10) == "Time stamp" ) {
+      if (trees.size()) {
+	forests.push_back( new Forest(trees, method) );
+	trees.clear();
+      }
+    }
+
     // check if we are at new tree
-    if (line.size() >= 14 && line.substr(2,13) == "Decision Tree") {
+    if ( (line.size() >= 14 && line.substr(2,13) == "Decision Tree") || (line.size() >= 5 && line.substr(2,3) == "End") ) {
       if (treeReadIn.size()) {
 	trees.push_back( new DecisionTree(treeReadIn, config) );
       }
@@ -141,22 +218,10 @@ int main(int argc, char * argv[]) {
     treeReadIn.push_back( std::make_pair(weight, cuts) );
         
   }
+   
+  // remember to add last forest
+  forests.push_back( new Forest(trees, method) );
   
-  // remember to add last tree
-  trees.push_back( new DecisionTree(treeReadIn, config) );
-
-  // remove trees if requested
-  int maxTrees = trees.size();
-  config->getif<int>("MaxTrees", maxTrees);
-  if (maxTrees > 0 && maxTrees < static_cast<int>(trees.size())) {
-    for (unsigned int itree = 0; itree < trees.size(); ++itree) {
-      if (static_cast<int>(itree) > maxTrees) delete trees.at(itree);
-    }
-    trees.resize(maxTrees);
-  }    
-  log << Log::INFO << "Weights succesfully read from file!" << Log::endl();
-  log << Log::INFO << "Number of decision trees : " << trees.size() << Log::endl();
-
   // open input file in 'update' mode
   const std::string & inputfilename = config->get<std::string>("InputFileName");
   TFile * f = new TFile(inputfilename.c_str(), "update");
@@ -187,7 +252,9 @@ int main(int argc, char * argv[]) {
   float weight_err;
   std::string weightErrName = weightName + "_err";
   TBranch * b_weight_err = 0;
-  if (method == Method::RF || method == Method::ET) b_weight_err = initial->Branch(weightErrName.c_str(), &weight_err);
+  bool bagging = false;
+  config->getif<bool>("Bagging", bagging);
+  if (method == Method::RF || method == Method::ET || bagging) b_weight_err = initial->Branch(weightErrName.c_str(), &weight_err);
   std::vector<float> weight_err_vec(trees.size());
   
   // prepare for loop over tree entries
@@ -210,39 +277,24 @@ int main(int argc, char * argv[]) {
     // get event
     initial->GetEntry( ievent );
 
-    // initialise weight
-    if      (method == Method::BDT) weight = 1.;
-    else if (method == Method::RF ) weight = 0.;
-    else if (method == Method::ET ) weight = 0.;
-
-    // loop over trees
-    for (unsigned int itree = 0; itree < trees.size(); ++itree) {
-
-      // get decision tree weight
-      float w = trees.at(itree)->GetWeight();
-      
-      // update event weight
-      if (method == Method::BDT) {
-	weight *= w;
-      }
-      else if (method == Method::RF || method == Method::ET) {
-	weight += w;
-	weight_err_vec.at(itree) = w;
-      }
-
+    // get weight/error
+    weight = 0;
+    weight_err = 0;
+    for (unsigned int f = 0; f < forests.size(); ++f) {
+      Forest * forest = forests.at(f);
+      float w = 0;
+      float e = 0;
+      forest->GetWeight(w, e);
+      weight += w;
+      weight_err_vec.at(f) = (e > 0 ? e : w);
     }
-
+    
     // finalise weight
-    if (method == Method::RF || method == Method::ET) {
-
-      weight /= static_cast<float>( trees.size() );
-
-      for (unsigned int itree = 0; itree < trees.size(); ++itree) {
-	weight_err += pow(weight_err_vec.at(itree) - weight, 2);
-      }
-      weight_err = sqrt( weight_err/(trees.size() - 1) );
-      
+    weight /= static_cast<float>( forests.size() );
+    for (unsigned int f = 0; f < forests.size(); ++f) {
+      weight_err += pow(weight_err_vec.at(f) - weight, 2);
     }
+    weight_err = sqrt( weight_err/( forests.size() > 1 ? forests.size() - 1 : 1 ) );
     
     // fill weight
     b_weight->Fill();
