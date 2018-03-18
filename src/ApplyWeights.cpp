@@ -27,7 +27,7 @@ class Forest {
 public:
   
   // constructor
-  Forest(const std::vector<const DecisionTree *> trees, Method::TYPE method) : m_trees(trees), m_method(method), m_cached(false), m_weight(0), m_error(0) {}
+  Forest(const std::vector<const DecisionTree *> trees, Method::TYPE method) : m_trees(trees), m_method(method), m_weight(0), m_error(0) {}
 
   // destructor
   ~Forest() {}
@@ -35,9 +35,9 @@ public:
   // get weight
   void GetWeight(float & weight, float & error) 
   {   
-    if ( ! m_cached ) CalculateWeight();
+    CalculateWeight();
     weight = m_weight;
-    error = m_error;
+    error  = m_error;
   }
 
 
@@ -45,7 +45,6 @@ private:
 
   // calculate weight
   void CalculateWeight() {
-
     if (m_method == Method::BDT) {
       for (unsigned int i = 0; i < m_trees.size(); ++i) {
 	float w = m_trees.at(i)->GetWeight();
@@ -67,9 +66,6 @@ private:
       }
       m_error = sqrt( m_error/( m_trees.size() > 1 ? m_trees.size() - 1 : 1 ) );
     }
-    
-    m_cached = true;
-
   }
   
   // trees
@@ -79,7 +75,6 @@ private:
   const Method::TYPE m_method;
 
   // weight/error
-  bool m_cached;
   float m_weight;
   float m_error;
 
@@ -144,7 +139,7 @@ int main(int argc, char * argv[]) {
     log << Log::DEBUG << line << Log::endl();
 
     // check if we are at new forest
-    if ( line.size() >= 14 && line.substr(2,10) == "Time stamp" ) {
+    if ( line.size() >= 10 && line.substr(0,10) == "Time stamp" ) {
       if (trees.size()) {
 	forests.push_back( new Forest(trees, method) );
 	trees.clear();
@@ -255,7 +250,7 @@ int main(int argc, char * argv[]) {
   bool bagging = false;
   config->getif<bool>("Bagging", bagging);
   if (method == Method::RF || method == Method::ET || bagging) b_weight_err = initial->Branch(weightErrName.c_str(), &weight_err);
-  std::vector<float> weight_err_vec(trees.size());
+  std::vector<float> weight_err_vec(forests.size());
   
   // prepare for loop over tree entries
   long maxEvent = initial->GetEntries();
