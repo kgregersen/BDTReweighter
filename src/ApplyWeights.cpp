@@ -46,6 +46,7 @@ private:
   // calculate weight
   void CalculateWeight() {
     if (m_method == Method::BDT) {
+      m_weight = 1;
       for (unsigned int i = 0; i < m_trees.size(); ++i) {
 	float w = m_trees.at(i)->GetWeight();
 	m_weight *= w;
@@ -53,6 +54,7 @@ private:
       m_error = 0.;
     }
     else if (m_method == Method::RF || m_method == Method::ET) {
+      m_weight = 0;
       static std::vector<float> error_vec;
       error_vec.resize(m_trees.size());
       for (unsigned int i = 0; i < m_trees.size(); ++i) {
